@@ -2,7 +2,7 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.2.0] - 2026-09-30
 
 ### Fixed
 - 修复 `get_server_status`：`current_state` 误从 `resources` 子对象读取（实际在 `attributes` 顶层），导致状态恒显示「?」。
