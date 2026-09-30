@@ -69,9 +69,13 @@ uv sync
 uv run pteropilot
 ```
 
+## 兼容性
+
+同时支持 **Pterodactyl v1** 与 **Pelican**。所用 client / application API 端点及 payload 形状均已对照 Pelican 面板源码（routes 与 controllers）核实，一个 MCP server 两个面板通用。
+
 ## 状态与路线图
 
-当前 **v0.1 开发中**。Pterodactyl v1 API 先行，Pelican 兼容层随后（两者 API 同源）。
+当前 **v0.1 开发中**。
 
 ## 安全说明
 

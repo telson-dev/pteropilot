@@ -69,9 +69,13 @@ uv sync
 uv run pteropilot
 ```
 
+## Compatibility
+
+Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoint and payload shape used here has been verified against the Pelican panel source (routes and controllers), so one MCP server drives either panel.
+
 ## Status & roadmap
 
-Currently **v0.1 under active development**. Pterodactyl v1 API first; a Pelican compatibility layer follows (the APIs share the same origin).
+Currently **v0.1 under active development**.
 
 ## Security
 

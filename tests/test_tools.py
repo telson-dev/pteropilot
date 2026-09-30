@@ -34,13 +34,13 @@ async def test_status_formatting(fake):
         "/resources",
         {
             "attributes": {
+                "current_state": "running",
                 "resources": {
-                    "current_state": "running",
                     "cpu_absolute": 33.0,
                     "memory_bytes": 1048576,
                     "disk_bytes": 2097152,
                     "uptime": 5000,
-                }
+                },
             }
         },
     )

@@ -1,7 +1,8 @@
 """Pterodactyl / Pelican 面板 API 客户端。
 
 实现 Pterodactyl Client/Application API 的常用端点；
-Pelican 与 Pterodactyl API 同源，绝大多数调用可直接复用。
+Pelican 与 Pterodactyl API 同源，本文档所用的全部端点与 payload
+已对照 Pelican 源码（routes/ 与 Http/Controllers/Api/）逐一核实，可直接复用。
 
 list 端点统一返回 data 数组；httpx 在 4xx/5xx 时抛出 HTTPStatusError。
 """
@@ -75,12 +76,7 @@ class PanelClient:
     # ================= Client API：服务器与状态 =================
 
     async def client_servers(self) -> list[dict]:
-        r = await self.client.get("")
-        r.raise_for_status()
-        payload = r.json()
-        if isinstance(payload, dict):
-            return payload.get("data", [])
-        return payload
+        return await self._paginated(self.client, "")
 
     async def resources(self, server_id: str) -> dict:
         r = await self.client.get(f"/servers/{server_id}/resources")
@@ -133,9 +129,10 @@ class PanelClient:
     async def rename_file(
         self, server_id: str, directory: str, old_name: str, new_name: str
     ) -> None:
+        # 两个面板的约定一致：{root, files: [{from, to}]}，支持批量重命名/移动。
         r = await self.client.put(
             f"/servers/{server_id}/files/rename",
-            json={"directory": directory, "from": old_name, "to": new_name},
+            json={"root": directory, "files": [{"from": old_name, "to": new_name}]},
         )
         r.raise_for_status()
 

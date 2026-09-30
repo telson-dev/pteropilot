@@ -2,6 +2,16 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Fixed
+- 修复 `get_server_status`：`current_state` 误从 `resources` 子对象读取（实际在 `attributes` 顶层），导致状态恒显示「?」。
+- 修复 `rename_file` 请求体：改为面板约定 `{root, files: [{from, to}]}`（原 `{directory, from, to}` 两个面板均不识别）。
+- 客户端服务器列表现在正确遍历分页（此前仅取第一页，超过单页会漏服务器）。
+
+### Added
+- Pelican 兼容性验证：全部端点与 payload 对照 Pelican 源码（routes/ 与 Http/Controllers/Api/）核实，并补充 Pelican 形状的离线测试用例。
+
 ## [0.1.0] - 2026-09-27
 
 首个开发版本。

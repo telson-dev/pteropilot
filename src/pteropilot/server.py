@@ -92,8 +92,8 @@ async def list_nodes() -> str:
 async def get_server_status(server_id: str) -> str:
     """查看单个服务器实时状态与资源占用：状态、CPU、内存、磁盘、网络、在线时长。"""
     res = await panel.resources(server_id)
+    state = res.get("current_state", "?")
     r = res.get("resources", res)
-    state = r.get("current_state", "?")
 
     def mb(x: Any) -> str:
         return f"{x / 1024 / 1024:.1f} MB" if isinstance(x, (int, float)) else str(x)
