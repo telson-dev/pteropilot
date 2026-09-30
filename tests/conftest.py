@@ -46,14 +46,17 @@ def fake(monkeypatch: pytest.MonkeyPatch) -> FakePanel:
 
     def fake_init(self: PanelClient, config: Config, timeout: float = 30.0) -> None:
         headers = {"Authorization": "Bearer test", "Accept": "application/json"}
+        self.timeout = timeout
         self.app = httpx.AsyncClient(transport=transport, base_url="https://panel/api/application", headers=headers)
         self.client = httpx.AsyncClient(transport=transport, base_url="https://panel/api/client", headers=headers)
+        self.daemon = httpx.AsyncClient(transport=transport)
 
     monkeypatch.setattr(PanelClient, "__init__", fake_init)
 
     async def fake_aclose(self: PanelClient) -> None:
         await self.app.aclose()
         await self.client.aclose()
+        await self.daemon.aclose()
 
     monkeypatch.setattr(PanelClient, "aclose", fake_aclose)
     return fake_panel

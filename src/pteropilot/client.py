@@ -32,16 +32,20 @@ class PanelClient:
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
+        self.timeout = timeout
         self.app = httpx.AsyncClient(
             base_url=f"{base}/api/application", headers=headers, timeout=timeout
         )
         self.client = httpx.AsyncClient(
             base_url=f"{base}/api/client", headers=headers, timeout=timeout
         )
+        # daemon（wings）直连客户端：上传/下载文件打签名 URL，无 Bearer 认证。
+        self.daemon = httpx.AsyncClient(timeout=timeout)
 
     async def aclose(self) -> None:
         await self.app.aclose()
         await self.client.aclose()
+        await self.daemon.aclose()
 
     # ---- 分页 ----
 
@@ -149,6 +153,30 @@ class PanelClient:
         )
         r.raise_for_status()
         return r.json().get("attributes", {}).get("url", "")
+
+    async def create_folder(self, server_id: str, directory: str, name: str) -> None:
+        r = await self.client.post(
+            f"/servers/{server_id}/files/create-folder",
+            json={"root": directory, "name": name},
+        )
+        r.raise_for_status()
+
+    async def upload_url(self, server_id: str) -> str:
+        r = await self.client.get(f"/servers/{server_id}/files/upload")
+        r.raise_for_status()
+        return r.json().get("attributes", {}).get("url", "")
+
+    async def upload_file(
+        self, server_id: str, directory: str, filename: str, content: bytes
+    ) -> None:
+        """两步上传：面板签发签名 URL，再直连 daemon multipart 上传。"""
+        url = await self.upload_url(server_id)
+        if not url:
+            raise PanelError("面板未返回上传 URL")
+        r = await self.daemon.post(
+            url, params={"directory": directory}, files={"files": (filename, content)}
+        )
+        r.raise_for_status()
 
     # ================= 备份 =================
 

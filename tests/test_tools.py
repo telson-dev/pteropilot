@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+
 import httpx
 import pytest
 
@@ -106,3 +108,44 @@ async def test_create_backup_ok(fake):
     fake.route("POST", "/backups", {"attributes": {"uuid": "bk1"}})
     out = await srv.create_backup("s1")
     assert "bk1" in out
+
+
+async def test_download_file_tool(fake):
+    _bind(fake)
+    fake.route("GET", "/files/download", {"object": "signed_url", "attributes": {"url": "https://s3/dl"}})
+    out = await srv.download_file("s1", "/a.txt")
+    assert "https://s3/dl" in out
+
+
+async def test_create_folder_tool(fake):
+    _bind(fake)
+    fake.route("POST", "/create-folder", {})
+    out = await srv.create_folder("s1", "/", "mods")
+    assert "✅" in out
+
+
+async def test_rename_requires_confirm(fake):
+    _bind(fake)
+    out = await srv.rename_file("s1", "/", "a", "b")
+    assert "高危" in out
+
+
+async def test_rename_with_confirm(fake):
+    _bind(fake)
+    fake.route("PUT", "/files/rename", {})
+    out = await srv.rename_file("s1", "/", "a", "b", confirm=True)
+    assert "✅" in out
+
+
+async def test_upload_requires_confirm(fake):
+    _bind(fake)
+    out = await srv.upload_file("s1", "/", "a.jar", base64.b64encode(b"x").decode())
+    assert "高危" in out
+
+
+async def test_upload_ok(fake):
+    _bind(fake)
+    fake.route("GET", "/files/upload", {"object": "signed_url", "attributes": {"url": "https://daemon/upload/file?token=t"}})
+    fake.route("POST", "/upload/file", {})
+    out = await srv.upload_file("s1", "/", "a.jar", base64.b64encode(b"x").decode(), confirm=True)
+    assert "✅" in out

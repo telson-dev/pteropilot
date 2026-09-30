@@ -114,3 +114,30 @@ async def test_http_error_propagates(client, fake):
     fake.route("GET", "/backups", httpx.Response(500, json={"errors": []}))
     with pytest.raises(httpx.HTTPStatusError):
         await client.list_backups("s1")
+
+
+async def test_download_url(client, fake):
+    fake.route("GET", "/files/download", {"object": "signed_url", "attributes": {"url": "https://s3/backup"}})
+    assert await client.download_url("s1", "/world.zip") == "https://s3/backup"
+
+
+async def test_create_folder_payload(client, fake):
+    fake.route("POST", "/files/create-folder", {})
+    await client.create_folder("s1", "/plugins", "mods")
+    post = [r for r in fake.requests if r.method == "POST" and "/create-folder" in str(r.url)]
+    assert len(post) == 1
+    assert json.loads(post[0].content) == {"root": "/plugins", "name": "mods"}
+
+
+async def test_upload_url(client, fake):
+    fake.route("GET", "/files/upload", {"object": "signed_url", "attributes": {"url": "https://daemon/upload/file?token=t"}})
+    assert await client.upload_url("s1") == "https://daemon/upload/file?token=t"
+
+
+async def test_upload_file_two_step(client, fake):
+    fake.route("GET", "/files/upload", {"object": "signed_url", "attributes": {"url": "https://daemon/upload/file?token=t"}})
+    fake.route("POST", "/upload/file", {})
+    await client.upload_file("s1", "/plugins", "mod.jar", b"\x01\x02")
+    posts = [r for r in fake.requests if r.method == "POST" and "/upload/file" in str(r.url.path)]
+    assert len(posts) == 1
+    assert posts[0].url.params.get("directory") == "/plugins"

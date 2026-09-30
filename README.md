@@ -16,7 +16,7 @@ No panel login, no digging through logs — just ask.
 - 📊 List servers, live status, and resource usage
 - ⚡ Power controls: start / stop / restart / kill
 - 🖥️ Console: send commands
-- 📁 Files: browse, read, write, delete
+- 📁 Files: browse, read, write, upload, rename, delete, create folders, one-time download links
 - 💾 Backups: list, create, restore, delete
 - 🔒 Safety: read-only mode and explicit confirmation for dangerous actions; your API key never leaves your machine
 

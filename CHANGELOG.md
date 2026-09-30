@@ -11,6 +11,7 @@
 
 ### Added
 - Pelican 兼容性验证：全部端点与 payload 对照 Pelican 源码（routes/ 与 Http/Controllers/Api/）核实，并补充 Pelican 形状的离线测试用例。
+- 新增 4 个文件管理工具：`upload_file`（base64 内容，两步上传直连 daemon）、`download_file`（一次性下载链接）、`create_folder`、`rename_file`（此前 client 有原语但未暴露）。
 
 ## [0.1.0] - 2026-09-27
 

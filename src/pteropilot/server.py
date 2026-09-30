@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -133,6 +134,15 @@ async def read_file(server_id: str, path: str, max_chars: int = 20000) -> str:
 
 
 @mcp.tool()
+async def download_file(server_id: str, path: str) -> str:
+    """获取服务器上某文件的一次性下载链接（约 15 分钟有效）。"""
+    url = await panel.download_url(server_id, path)
+    if not url:
+        return "(未获取到下载链接)"
+    return f"🔗 下载链接（约 15 分钟有效）:\n{url}"
+
+
+@mcp.tool()
 async def list_backups(server_id: str) -> str:
     """列出服务器备份：名称、UUID、大小、完成状态、是否锁定。"""
     backups = await panel.list_backups(server_id)
@@ -202,6 +212,50 @@ async def delete_files(server_id: str, paths: list[str], confirm: bool = False) 
         return blocked
     await panel.delete_files(server_id, root="/", paths=paths)
     return f"✅ 已删除 {len(paths)} 项: {', '.join(paths)}"
+
+
+@mcp.tool()
+async def create_folder(server_id: str, directory: str, name: str) -> str:
+    """在服务器指定目录下新建一个文件夹。"""
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+    await panel.create_folder(server_id, directory, name)
+    return f"✅ 已创建文件夹: {directory.rstrip('/')}/{name}"
+
+
+@mcp.tool()
+async def rename_file(
+    server_id: str, directory: str, old_name: str, new_name: str, confirm: bool = False
+) -> str:
+    """重命名/移动服务器上的文件或文件夹（覆盖同名目标需 confirm=True）。"""
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+    blocked = _need_confirm(confirm, "重命名/移动文件")
+    if blocked:
+        return blocked
+    await panel.rename_file(server_id, directory, old_name, new_name)
+    return f"✅ 已重命名: {old_name} → {new_name}"
+
+
+@mcp.tool()
+async def upload_file(
+    server_id: str, directory: str, filename: str, content_b64: str, confirm: bool = False
+) -> str:
+    """上传文件（content_b64 为 base64 编码的文件内容；覆盖同名文件需 confirm=True）。"""
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+    blocked = _need_confirm(confirm, "上传/覆盖文件")
+    if blocked:
+        return blocked
+    try:
+        content = base64.b64decode(content_b64, validate=True)
+    except Exception:
+        return "⚠️ content_b64 不是合法的 base64 内容。"
+    await panel.upload_file(server_id, directory, filename, content)
+    return f"✅ 已上传: {filename}（{len(content)} 字节）到 {directory}"
 
 
 @mcp.tool()
