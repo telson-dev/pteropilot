@@ -63,7 +63,7 @@ Then just talk to your AI naturally, for example:
 ## Run from source
 
 ```bash
-git clone https://github.com/WinbowJi/pteropilot.git
+git clone https://github.com/telson-dev/pteropilot.git
 cd pteropilot
 uv sync
 uv run pteropilot
@@ -75,7 +75,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Currently **v0.1 under active development**.
+Current release: **v0.2.0** (see [CHANGELOG](CHANGELOG.md)).
 
 ## Security
 

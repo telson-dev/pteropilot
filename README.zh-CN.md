@@ -63,7 +63,7 @@ uvx pteropilot
 ## 从源码运行（开发者）
 
 ```bash
-git clone https://github.com/WinbowJi/pteropilot.git
+git clone https://github.com/telson-dev/pteropilot.git
 cd pteropilot
 uv sync
 uv run pteropilot
@@ -75,7 +75,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前 **v0.1 开发中**。
+当前发布版：**v0.2.0**（见 [CHANGELOG](CHANGELOG.md)）。
 
 ## 安全说明
 
