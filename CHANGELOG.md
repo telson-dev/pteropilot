@@ -2,6 +2,18 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.1] - 2026-10-18
+
+### Added
+- 新增 `get_console_log` 工具：读取服务器控制台最近日志，补全「发指令 → 看回馈」闭环。
+
+### Changed
+- `stop` 电源操作纳入二次确认（与 restart/kill 一致；start 免确认）。
+- `PANEL_READONLY` 容错增强：`1/true/yes/on`（大小写、空格不敏感）均能开启只读模式。
+
+### Fixed
+- 修复 SECURITY.md 漏洞报告链接的相对路径 404。
+
 ## [0.2.0] - 2026-09-30
 
 ### Fixed

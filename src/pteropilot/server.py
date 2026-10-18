@@ -164,18 +164,27 @@ async def list_backups(server_id: str) -> str:
 
 @mcp.tool()
 async def power_signal(server_id: str, signal: str, confirm: bool = False) -> str:
-    """控制服务器电源：start/stop/restart/kill。restart 与 kill 需 confirm=True。"""
+    """控制服务器电源：start/stop/restart/kill。stop/restart/kill 需 confirm=True。"""
     denied = _denied_if_readonly()
     if denied:
         return denied
     if signal not in POWER_SIGNALS:
         return f"非法信号 {signal}，可选: {', '.join(POWER_SIGNALS)}"
-    if signal in ("restart", "kill"):
+    if signal in ("stop", "restart", "kill"):
         blocked = _need_confirm(confirm, f"{signal} 电源操作")
         if blocked:
             return blocked
     await panel.power(server_id, signal)
     return f"✅ 已向 {server_id} 发送电源信号: {signal}"
+
+
+@mcp.tool()
+async def get_console_log(server_id: str, max_chars: int = 8000) -> str:
+    """读取服务器控制台最近的日志输出（用于查看指令回馈、报错、启动引导）。"""
+    log = await panel.console_log(server_id)
+    if len(log) > max_chars:
+        return log[-max_chars:] + f"\n...[已截断，仅显示末尾 {max_chars} 字符]"
+    return log
 
 
 @mcp.tool()

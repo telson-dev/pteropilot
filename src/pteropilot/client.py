@@ -98,6 +98,14 @@ class PanelClient:
         )
         r.raise_for_status()
 
+    # ---- 控制台 ----
+
+    async def console_log(self, server_id: str) -> str:
+        """读取服务器控制台最近一段日志（Pelican/Pterodactyl 均返回纯文本）。"""
+        r = await self.client.get(f"/servers/{server_id}/console")
+        r.raise_for_status()
+        return r.text
+
     async def send_command(self, server_id: str, command: str) -> None:
         r = await self.client.post(
             f"/servers/{server_id}/command", json={"command": command}

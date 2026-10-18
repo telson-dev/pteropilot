@@ -65,6 +65,31 @@ async def test_restart_requires_confirm(fake):
     assert not any(r.method == "POST" for r in fake.requests)
 
 
+async def test_get_console_log(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/console",
+        httpx.Response(200, text="[INFO] Server starting...\n[DONE] ready"),
+    )
+    out = await srv.get_console_log("s1")
+    assert "Server starting" in out and "ready" in out
+
+
+async def test_send_command_tool(fake):
+    _bind(fake)
+    fake.route("POST", "/command", {})
+    out = await srv.send_command("s1", "say hi")
+    assert "✅" in out
+
+
+async def test_stop_requires_confirm(fake):
+    _bind(fake)
+    out = await srv.power_signal("s1", "stop")
+    assert "高危" in out
+    assert not any(r.method == "POST" for r in fake.requests)
+
+
 async def test_start_does_not_need_confirm(fake):
     _bind(fake)
     fake.route("POST", "/power", {})

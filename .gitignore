@@ -5,3 +5,13 @@ dist/
 build/
 *.egg-info/
 .env
+promo/frames/
+promo/smoke/
+promo/src/node_modules/
+# 宣传片工作产物（音乐/渲染/临时脚本）不入库
+promo/audio/
+promo/renders/
+promo/src/tabbit/
+promo/
+tmp_check.js
+docs/aegis/
