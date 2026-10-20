@@ -15,3 +15,4 @@ promo/src/tabbit/
 promo/
 tmp_check.js
 docs/aegis/
+.coverage
