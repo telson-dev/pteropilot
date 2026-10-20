@@ -22,6 +22,77 @@ class PanelError(RuntimeError):
     """可预期的面板调用错误。"""
 
 
+class _Guarded:
+    """httpx 客户端的薄包装：把网络异常和 HTTP 状态码翻译成中文提示。
+
+    18 个工具因此不必各自 try/except，AI 拿到的都是能直接读懂（也能直接转述
+    给用户）的中文说明，而不是 httpx 的英文原文。
+
+    HTTP_STATUS：常见状态码 → 人类可读的原因 + 排查方向。
+    """
+
+    HTTP_STATUS = {
+        401: "API Key 无效或已被撤销（401）。请检查 PANEL_API_KEY 是否填对、是否已被删除。",
+        403: "这个 API Key 没有该项权限（403）。可能是面板管理员 Key 与用户 Key 用混了。",
+        404: "面板上找不到这个目标（404）。请检查 PANEL_URL 或服务器标识是否正确。",
+        405: "面板不支持这个操作（405）。可能是面板版本较旧或端点被禁用。",
+        422: "面板认为请求参数不合法（422）。请检查传入的路径、名称或信号值。",
+        429: "请求过于频繁被限流（429）。稍等一会儿再试。",
+    }
+
+    def __init__(self, inner: httpx.AsyncClient) -> None:
+        self._inner = inner
+
+    def _speak(self, r: httpx.Response) -> httpx.Response:
+        """只放行成功响应，其余一律转成中文 PanelError。"""
+        if r.is_success:
+            return r
+        known = self.HTTP_STATUS.get(r.status_code)
+        if known:
+            raise PanelError(f"面板拒绝了请求：{known}")
+        if r.status_code >= 500:
+            raise PanelError(
+                f"面板自身出错（HTTP {r.status_code}），通常是面板服务暂时异常，"
+                "稍后重试即可。"
+            )
+        detail = (r.text or "").strip()
+        raise PanelError(
+            f"面板返回 HTTP {r.status_code}"
+            + (f"。原文：{detail[:160]}" if detail else "。")
+        )
+
+    async def _ask(self, method: str, *args, **kwargs) -> httpx.Response:
+        try:
+            r = await getattr(self._inner, method)(*args, **kwargs)
+        except httpx.ConnectError as exc:
+            raise PanelError(
+                "连不上面板。请检查 PANEL_URL 是否正确（要带 https://）、"
+                "面板是否在线、网络是否可达。"
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise PanelError(
+                "面板响应超时（30 秒）。面板可能负载过高或网络不稳，稍后重试。"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise PanelError(f"与面板通信失败：{exc!s}") from exc
+        return self._speak(r)
+
+    async def get(self, *args, **kwargs) -> httpx.Response:
+        return await self._ask("get", *args, **kwargs)
+
+    async def post(self, *args, **kwargs) -> httpx.Response:
+        return await self._ask("post", *args, **kwargs)
+
+    async def put(self, *args, **kwargs) -> httpx.Response:
+        return await self._ask("put", *args, **kwargs)
+
+    async def delete(self, *args, **kwargs) -> httpx.Response:
+        return await self._ask("delete", *args, **kwargs)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
 class PanelClient:
     """面板 API 异步客户端。"""
 
@@ -33,14 +104,18 @@ class PanelClient:
             "Content-Type": "application/json",
         }
         self.timeout = timeout
-        self.app = httpx.AsyncClient(
-            base_url=f"{base}/api/application", headers=headers, timeout=timeout
+        self.app = _Guarded(
+            httpx.AsyncClient(
+                base_url=f"{base}/api/application", headers=headers, timeout=timeout
+            )
         )
-        self.client = httpx.AsyncClient(
-            base_url=f"{base}/api/client", headers=headers, timeout=timeout
+        self.client = _Guarded(
+            httpx.AsyncClient(
+                base_url=f"{base}/api/client", headers=headers, timeout=timeout
+            )
         )
         # daemon（wings）直连客户端：上传/下载文件打签名 URL，无 Bearer 认证。
-        self.daemon = httpx.AsyncClient(timeout=timeout)
+        self.daemon = _Guarded(httpx.AsyncClient(timeout=timeout))
 
     async def aclose(self) -> None:
         await self.app.aclose()
@@ -50,7 +125,7 @@ class PanelClient:
     # ---- 分页 ----
 
     @staticmethod
-    async def _paginated(get: httpx.AsyncClient, path: str) -> list[dict]:
+    async def _paginated(get: _Guarded, path: str) -> list[dict]:
         """遍历分页端点，聚合全部 data。"""
         data: list[dict] = []
         params: dict[str, Any] = {"per_page": 100, "page": 1}

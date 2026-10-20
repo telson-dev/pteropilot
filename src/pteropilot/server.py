@@ -10,14 +10,19 @@
 from __future__ import annotations
 
 import base64
+import sys
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from . import __version__
 from .client import POWER_SIGNALS, PanelClient
 from .config import Config
 
 mcp = FastMCP("pteropilot")
+# mcp 1.30 的 FastMCP 不接 version 参数，握手时会 fallback 成 mcp 框架自己的
+# 版本号（1.30.0）。只能直接改 low-level server，客户端才能看到真实版本。
+mcp._mcp_server.version = __version__
 config = Config()
 panel = PanelClient(config)
 
@@ -304,7 +309,20 @@ async def delete_backup(server_id: str, backup_id: str, confirm: bool = False) -
 
 
 def main() -> None:
-    config.validate()
+    try:
+        config.validate()
+    except ValueError as exc:
+        print(f"PteroPilot 启动失败：{exc}", file=sys.stderr)
+        print(
+            "\n请在 MCP 客户端的配置里补上这两个环境变量：\n"
+            '    "env": {\n'
+            '      "PANEL_URL": "https://panel.example.com",\n'
+            '      "PANEL_API_KEY": "ptlc_xxxxxxxx"\n'
+            "    }\n"
+            "面板地址从浏览器地址栏复制；API Key 在面板「账户 → API 凭证」里生成。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     mcp.run()
 
 
