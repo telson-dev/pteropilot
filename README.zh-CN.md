@@ -75,13 +75,17 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.0**（见 [CHANGELOG](CHANGELOG.md)）。
+当前发布版：**v0.2.1**（见 [CHANGELOG](CHANGELOG.md)）。完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 
 - API Key 只保存在你本机的客户端配置中，仅用于直接请求你的面板，不经过任何第三方服务器
 - 不放心就开 `PANEL_READONLY=1`，AI 只能看不能动
 - 建议给 AI 使用权限最小化的 API Key
+
+## 文档
+
+[快速上手、Pterodactyl/Pelican 配置示例、FAQ](docs/README.md)
 
 ## 许可
 

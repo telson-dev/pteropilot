@@ -75,13 +75,17 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.0** (see [CHANGELOG](CHANGELOG.md)).
+Current release: **v0.2.1** (see [CHANGELOG](CHANGELOG.md)). Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 
 - Your API key lives only in your local client config and talks directly to your panel — it never passes through any third-party server
 - Set `PANEL_READONLY=1` if you want the AI to be look-but-don't-touch
 - Prefer a least-privilege API key for AI use
+
+## Docs
+
+[Quick start, Pterodactyl/Pelican config examples, and FAQ](docs/README.md)
 
 ## License
 
