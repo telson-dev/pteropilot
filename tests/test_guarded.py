@@ -191,3 +191,44 @@ def test_config_validate_missing():
 def test_config_validate_missing_key():
     with pytest.raises(ValueError):
         Config(panel_url="https://panel", panel_api_key="").validate()
+
+
+# ---------- 密钥脱敏（审计 2026-10-20） ----------
+
+
+async def test_guarded_redacts_bearer_in_error_body():
+    secret = "ptlc_" + "supersecret123"
+    body = {"errors": [{"detail": "bad key: Bearer " + secret}]}
+    guard = _guarded(lambda req: httpx.Response(400, json=body))
+    with pytest.raises(PanelError) as ei:
+        await guard.get("https://panel/api/client/x")
+    msg = str(ei.value)
+    assert secret not in msg
+    assert "***" in msg
+
+
+async def test_guarded_redacts_key_in_generic_error():
+    secret = "ptla_" + "abcdef123456"
+
+    def handler(req):
+        raise httpx.TooManyRedirects("failed with Bearer " + secret)
+
+    guard = _guarded(handler)
+    with pytest.raises(PanelError) as ei:
+        await guard.get("https://panel/api/client/x")
+    assert secret not in str(ei.value)
+
+
+def test_redact_replaces_key_shapes():
+    from pteropilot.client import redact
+
+    assert redact("Authorization: Bearer " + "ptlc_" + "abc.def-123") == "Authorization: ***"
+    assert "ptla_" not in redact("key " + "ptla_" + "zzz999")
+    assert redact("no secrets here") == "no secrets here"
+
+
+def test_config_repr_hides_api_key():
+    cfg = Config(panel_url="https://panel", panel_api_key="ptlc_" + "topsecret")
+    shown = repr(cfg)
+    assert "topsecret" not in shown
+    assert "panel_url" in shown

@@ -11,7 +11,9 @@ class Config:
     """PteroPilot 运行配置。"""
 
     panel_url: str = field(default_factory=lambda: os.environ.get("PANEL_URL", ""))
-    panel_api_key: str = field(default_factory=lambda: os.environ.get("PANEL_API_KEY", ""))
+    panel_api_key: str = field(
+        default_factory=lambda: os.environ.get("PANEL_API_KEY", ""), repr=False
+    )
     readonly: bool = field(default_factory=lambda: os.environ.get("PANEL_READONLY", "0").strip().lower() in ("1", "true", "yes", "on"))
 
     def validate(self) -> None:

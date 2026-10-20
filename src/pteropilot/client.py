@@ -9,6 +9,7 @@ list 端点统一返回 data 数组；httpx 在 4xx/5xx 时抛出 HTTPStatusErro
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -16,6 +17,20 @@ import httpx
 from .config import Config
 
 POWER_SIGNALS = ("start", "stop", "restart", "kill")
+
+# 可能被写进错误信息/日志的密钥形态，统一脱敏：
+# Bearer 头，以及 Pterodactyl / Pelican 的 API Key 前缀。
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]+"),
+    re.compile(r"\b(?:ptlc|ptla|peli)_[A-Za-z0-9_\-]+"),
+)
+
+
+def redact(text: str) -> str:
+    """把文本里的 API Key / Bearer 令牌替换成 ***，供错误信息与日志复用。"""
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub("***", text)
+    return text
 
 
 class PanelError(RuntimeError):
@@ -55,7 +70,7 @@ class _Guarded:
                 f"面板自身出错（HTTP {r.status_code}），通常是面板服务暂时异常，"
                 "稍后重试即可。"
             )
-        detail = (r.text or "").strip()
+        detail = redact((r.text or "").strip())
         raise PanelError(
             f"面板返回 HTTP {r.status_code}"
             + (f"。原文：{detail[:160]}" if detail else "。")
@@ -74,7 +89,7 @@ class _Guarded:
                 "面板响应超时（30 秒）。面板可能负载过高或网络不稳，稍后重试。"
             ) from exc
         except httpx.HTTPError as exc:
-            raise PanelError(f"与面板通信失败：{exc!s}") from exc
+            raise PanelError(f"与面板通信失败：{redact(str(exc))}") from exc
         return self._speak(r)
 
     async def get(self, *args, **kwargs) -> httpx.Response:
