@@ -80,3 +80,27 @@ and backups (create/list/restore/delete).
 
 ## 三、Glama 独立站
 无需单独操作。awesome-mcp-servers PR 合并后，Glama 目录（glama.ai/mcp/servers）自动同步。
+
+---
+
+## 四、收录自查（2026-10-21 实测）
+
+> 结论：**四个目录目前都未收录 pteropilot**，上架动作一个都还没落地。
+
+| 目录 | 是否已收录 | 实测证据 |
+|---|---|---|
+| awesome-mcp-servers（= Glama 数据源） | ❌ 未收录 | 拉取 `punkpeye/awesome-mcp-servers` main 分支 README（4621 行 / 1.5MB），全文 grep `pteropilot` 与 `telson` 均为 0 命中 |
+| Glama（glama.ai/mcp/servers/telson-dev/pteropilot） | ❌ 未收录 | 页面返回「We don't have an MCP server at telson-dev/pteropilot … may never have been submitted」 |
+| mcp.so | ❌ 未收录 | `mcp.so/search?q=pteropilot` 返回「0 results / No servers match」 |
+| PulseMCP（pulsemcp.com） | ❌ 未收录 | 站点被 Cloudflare 拦截（403），无法直连确认；但 Bing 搜索 `pteropilot pulsemcp` 无任何索引结果，基本可判定未收录 |
+
+**说明**：CHARTER.md 曾记「第 1 周：目录收录 ✅」为乐观误记，实际四目录均未收录。
+
+### PulseMCP 补充材料
+PulseMCP 走 GitHub 提交流程（pulsemcp.com 顶部 `Submit server` → 实际上引导到 <https://github.com/punkpeye/pulsemcp> 或官网表单）。与 awesome-mcp-servers 同为 punkpeye 生态，但**数据不自动同步**，需要单独提交。提交文案复用第二部分的 issue 正文模板即可，额外补一行 `**Category:** Gaming`。
+
+### 待季总点头后执行（不提交）
+1. awesome-mcp-servers：fork `punkpeye/awesome-mcp-servers` → Gaming 分类插入 §一 那行 → PR 标题末尾加 `🤖🤖🤖`。
+2. Glama：随 awesome 合并自动同步，无需单独动作。
+3. mcp.so：按 §二 模板开 issue。
+4. PulseMCP：按上面补充材料单独提交（Cloudflare 挡自动化，建议人工在浏览器里提交）。
