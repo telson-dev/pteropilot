@@ -27,11 +27,27 @@
   - [x] 备份：创建 / 列表 / 恢复 / 删除
   - [x] 安全：只读模式开关、确认机制、不泄漏 token
 
-## 4. 竞品快照（2026-09-26 GitHub 实测）
-- 10+ 个散装仓库，多为 ★0–3；最高 ★11（BlockMind，多主机聚合型）
-- 大多只支持 Pterodactyl；个别已兼容 Pelican（PteroMCP、mediavee 等）
-- 共性弱点：文档差、无托管版、维护断档、安全粗糙、无中文
-- （后续全网补充：MineCraftAI、PixelCloud 为产品级竞品，PteroPilot 的缝是「已有面板的 AI 运维层」）
+## 4. 竞品快照（2026-10-21 GitHub 实测更新）
+
+**格局一句话**：① 依旧碎 —— 20+ 散装仓库、绝大多数 ★0–3、最高仍 ★11（BlockMind）；② 出现新范式 —— 从「独立 MCP server」转向「Pterodactyl v2 面板内扩展」，直接以面板用户身份走 OAuth；③ 无人有托管版、无中文、文档普遍差，缝还在。
+
+| 仓库 | ★ | 最后 push | 语言 | 定位 / 弱点 |
+|---|---|---|---|---|
+| PrimeEcto/BlockMind | 11 | 2026-09 | TS | 多主机聚合型（18 主机+自托管），星最多但面向 MC server 管理，非纯面板运维 |
+| pavalso/pterodactyl-mcp | 3 | 2026-09 | TS | 通用 AI 代理；维护稀疏 |
+| PixlFlip-Enterprises/PterodactylMCP | 3 | 2026-05 | Py | 面板 API；半年未更 |
+| BSpoones/Pterodactyl-MCP | 2 | 2026-09 | TS | 纯 API 调用层，功能薄 |
+| jackh54/pterodactyl-panel-mcp | 1 | 2026-10 | PHP | **面板 v2 扩展**（OAuth 2.1，以用户身份操作）；新范式代表 |
+| CCBlueX/Pterodactyl-Extension-MCP | 1 | 2026-10 | PHP | **面板 v2 扩展**；官方生态成员 CCBlueX |
+| PotenFYR-Studios/PteroOps-MCP | 1 | 2026-10 | TS | 监控+管理，已上 Glama |
+| Bippy-s-AI-Helpers/pterodactyl-mcp | 0 | 2026-10 | TS | **105 工具**、default-deny 高危门禁、websocket 控制台；新、功能全但 0 星 |
+| RealmsNetwork/MAP | 0 | 2026-10 | Py | **多面板聚合网关**（Pterodactyl/Pelican/Crafty/AMP/MCSManager/PufferPanel） |
+| 其余 ~12 个（mediavee、sj58320、Showdown76py/PteroMCP、N1jada、oscardagrach 等） | 0–1 | 分散 | Py/TS | 单面板、无文档、多数断档或已归档 |
+
+**关键读取**：
+- 兼容 Pelican 的仍是少数（PteroMCP、mediavee、MAP 多面板型）。双面板仍是差异化，但 MAP 已把「多面板聚合」做到更宽。
+- 新威胁：CCBlueX 的「面板扩展」路线 —— 若 Pterodactyl 社区自己推扩展生态，独立 MCP server 的位子会被挤。PteroPilot 的护城河在**质量（测试/覆盖率/安全）+ 中文 + uvx 易装 + 后市托管**，而非面板本身。
+- 弱点共性依旧成立：文档差、无托管、维护断档、安全粗糙、无中文。
 
 ## 5. 差异化（4 张牌）
 1. **双面板**：Pterodactyl + Pelican 都支持（行业正在换代迁移，卡位时机）
