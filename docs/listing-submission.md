@@ -94,7 +94,7 @@ and backups (create/list/restore/delete).
 | mcp.so | ❌ 未收录 | `mcp.so/search?q=pteropilot` 返回「0 results / No servers match」 |
 | PulseMCP（pulsemcp.com） | ❌ 未收录 | 站点被 Cloudflare 拦截（403），无法直连确认；但 Bing 搜索 `pteropilot pulsemcp` 无任何索引结果，基本可判定未收录 |
 
-**说明**：CHARTER.md 曾记「第 1 周：目录收录 ✅」为乐观误记，实际四目录均未收录。
+**说明**：内部立项卡曾记「第 1 周：目录收录 ✅」为乐观误记，实际四目录均未收录。
 
 ### PulseMCP 补充材料
 PulseMCP 走 GitHub 提交流程（pulsemcp.com 顶部 `Submit server` → 实际上引导到 <https://github.com/punkpeye/pulsemcp> 或官网表单）。与 awesome-mcp-servers 同为 punkpeye 生态，但**数据不自动同步**，需要单独提交。提交文案复用第二部分的 issue 正文模板即可，额外补一行 `**Category:** Gaming`。
