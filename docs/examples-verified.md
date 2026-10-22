@@ -14,7 +14,7 @@
 | 3 | 无 `PANEL_URL`/`PANEL_API_KEY` 时的友好报错 | ✅ 通过（EXIT=1，中文提示） |
 | 4 | MCP 协议握手 / 版本上报 | ✅ 通过（version 0.2.1） |
 | 5 | 环境变量表与默认值 | ✅ 通过 |
-| 6 | 19 个工具名与 docs 工具一览表 | ✅ 一致（无漂移） |
+| 6 | 20 个工具名与 docs 工具一览表 | ✅ 一致（无漂移） |
 | 7 | 测试方式 `uv run pytest` | ✅ 通过（93 passed） |
 
 **结论：无文档漂移，示例全部实测通过，无需修文档或代码。**
@@ -86,10 +86,10 @@ $ echo '{"jsonrpc":"2.0","id":1,"method":"initialize",...}' | pteropilot.exe
 
 ### 6. 工具清单对齐
 
-- server.py 实测 `@mcp.tool()` 数量：**19**。
-- `docs/README.md`「工具一览」表行数：**19**。
+- server.py 实测 `@mcp.tool()` 数量：**20**。
+- `docs/README.md`「工具一览」表行数：**20**。
 - 逐一核对：`list_my_servers` / `list_all_servers` / `list_nodes` / `get_server_status`
-  / `list_files` / `read_file` / `download_file` / `list_backups` / `get_console_log`
+  / `list_players` / `list_files` / `read_file` / `download_file` / `list_backups` / `get_console_log`
   / `power_signal` / `send_command` / `write_file` / `delete_files` / `create_folder`
   / `rename_file` / `upload_file` / `create_backup` / `restore_backup` / `delete_backup`
   全部一致（`client.py` 有 `list_users` 方法但未暴露为工具，文档亦未列出，无漂移）。
