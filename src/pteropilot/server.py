@@ -115,6 +115,54 @@ async def get_server_status(server_id: str) -> str:
     )
 
 
+# 面板 current_state 常见取值及其健康判定。
+# healthy=运行正常；transitional=启动/停机中间态（通常无需干预）；
+# abnormal=需要关注的异常态。未识别取值归入 unknown。
+_STATE_HEALTH = {
+    "running": ("healthy", "服务器运行正常。"),
+    "starting": ("transitional", "服务器正在启动，稍候即就绪。"),
+    "stopping": ("transitional", "服务器正在停机，稍候即离线。"),
+    "offline": ("abnormal", "服务器已离线（进程未在运行）。若应在线，可能崩溃或被手动停止。"),
+    "error": ("abnormal", "服务器处于错误状态。通常是启动失败或运行中崩溃。"),
+    "suspended": ("abnormal", "服务器已被挂起（通常是管理员或欠费）。需管理员解除挂起。"),
+    "installing": ("transitional", "服务器正在安装/重装环境。"),
+    "reinstalling": ("transitional", "服务器正在重装，请勿打断。"),
+    "restoring_backup": ("transitional", "服务器正在从备份恢复。"),
+    "transferring": ("transitional", "服务器正在迁移节点。"),
+}
+
+
+def classify_state(state: str) -> tuple[str, str]:
+    """把面板 current_state 翻译成 (健康等级, 中文提示)。"""
+    return _STATE_HEALTH.get(state, ("unknown", f"未知状态「{state}」，请人工确认。"))
+
+
+@mcp.tool()
+async def check_server_health(server_id: str) -> str:
+    """检查服务器健康度：对比 current_state，把异常态翻译成中文结构化提示。
+
+    只读、不发外部告警。返回健康等级 + 状态说明 + 建议动作，供 AI 判断是否
+    需要进一步排查（如看控制台日志）或提醒用户。
+    """
+    res = await panel.resources(server_id)
+    state = res.get("current_state", "?")
+    level, hint = classify_state(state)
+    level_cn = {"healthy": "🟢 正常", "transitional": "🟡 中间态", "abnormal": "🔴 异常", "unknown": "⚪ 未知"}[level]
+    actions = {
+        "healthy": "无需干预。",
+        "transitional": "通常无需干预，可稍后复查；若长时间停留在此状态再排查。",
+        "abnormal": "建议：① 用 get_console_log 查看最近日志定位崩溃/停止原因；② 若确认需恢复，用 power_signal start 拉起；③ 若为挂起，联系管理员。",
+        "unknown": "面板返回了未识别的状态，建议用 get_server_status 查看完整信息并人工确认。",
+    }[level]
+    return (
+        f"服务器: {server_id}\n"
+        f"状态: {state}\n"
+        f"健康度: {level_cn}\n"
+        f"说明: {hint}\n"
+        f"建议: {actions}"
+    )
+
+
 @mcp.tool()
 async def list_players(server_id: str) -> str:
     """查当前在线的玩家：从最近控制台日志解析玩家加入/退出，列出在线名单。"""
