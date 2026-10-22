@@ -2,6 +2,13 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Fixed
+- MCP 握手上报真实版本号 `0.2.1`（此前回退到 mcp 框架自身的 1.30.0）。
+- 面板错误中文化：新增 `_Guarded` 包装 httpx 客户端，把 401/403/404/405/422/429/5xx 以及连接失败、超时统一转成中文 `PanelError`，18 个工具无需各自 try/except。
+- 缺少 `PANEL_URL`/`PANEL_API_KEY` 时打印中文引导并 `exit(1)`，不再抛 traceback。
+
 ## [0.2.1] - 2026-10-18
 
 ### Added
