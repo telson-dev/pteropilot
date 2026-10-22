@@ -33,6 +33,46 @@ def redact(text: str) -> str:
     return text
 
 
+# 玩家加入/退出日志的常见形态，覆盖 Minecraft 原版、Paper/Spigot、
+# Forge/Fabric，以及常见的中文/英文服务器消息。
+# 玩家名允许字母、数字、下划线、中横线、点、以及 Unicode 字符（中文字符名）。
+_PLAYER_NAME = r"[\w\u4e00-\u9fff\-.]+"
+_JOIN_PATTERNS = (
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) joined the game"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) joined the server"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) 加入了游戏"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) 加入了服务器"),
+    # 未翻译的旧版英文：
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) joined"),
+)
+_LEAVE_PATTERNS = (
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) left the game"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) left the server"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) disconnected"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) 离开了游戏"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) 断开了连接"),
+    re.compile(rf"([\w\u4e00-\u9fff\-.]+) left"),
+)
+
+
+def parse_join(line: str) -> str | None:
+    """识别一行日志里的「玩家加入」，返回玩家名；不是加入行则返回 None。"""
+    for pat in _JOIN_PATTERNS:
+        m = pat.search(line)
+        if m:
+            return m.group(1)
+    return None
+
+
+def parse_leave(line: str) -> str | None:
+    """识别一行日志里的「玩家退出」，返回玩家名；不是退出行则返回 None。"""
+    for pat in _LEAVE_PATTERNS:
+        m = pat.search(line)
+        if m:
+            return m.group(1)
+    return None
+
+
 class PanelError(RuntimeError):
     """可预期的面板调用错误。"""
 
@@ -195,6 +235,26 @@ class PanelClient:
         r = await self.client.get(f"/servers/{server_id}/console")
         r.raise_for_status()
         return r.text
+
+    async def online_players(self, server_id: str) -> list[str]:
+        """从控制台日志解析当前在线玩家名单，返回去重、有序的玩家名列表。
+
+        面板（Pterodactyl / Pelican）的 resources 端点不提供在线玩家字段，
+        因此退化为「分析最近控制台日志」：按玩家加入/退出的顺序重放日志，
+        维护一个在线集合，得到“最近一次加入后尚未退出”的玩家名单。
+        兼容 Minecraft 原版 / Paper / Spigot / Forge / Fabric 常见的中英文日志格式。
+        """
+        log = await self.console_log(server_id)
+        online: dict[str, None] = {}  # 保序去重，dict 模拟 ordered set
+        for line in log.splitlines():
+            joined = parse_join(line)
+            if joined is not None:
+                online[joined] = None
+                continue
+            left = parse_leave(line)
+            if left is not None:
+                online.pop(left, None)
+        return list(online.keys())
 
     async def send_command(self, server_id: str, command: str) -> None:
         r = await self.client.post(

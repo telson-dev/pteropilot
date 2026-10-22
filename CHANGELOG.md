@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 新增 `list_players` 工具：从控制台日志解析玩家加入/退出，返回当前在线人员名单；兼容 Minecraft 原版 / Paper / Spigot / Forge / Fabric 的中英文日志格式（Roadmap「查玩家在线」第一优先项）。
+
 ### Fixed
 - MCP 握手上报真实版本号 `0.2.1`（此前回退到 mcp 框架自身的 1.30.0）。
 - 面板错误中文化：新增 `_Guarded` 包装 httpx 客户端，把 401/403/404/405/422/429/5xx 以及连接失败、超时统一转成中文 `PanelError`，18 个工具无需各自 try/except。

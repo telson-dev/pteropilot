@@ -137,6 +137,7 @@
 | `list_all_servers` | 只读【管理员】 | 列出面板全部服务器 | — |
 | `list_nodes` | 只读【管理员】 | 列出所有节点 | — |
 | `get_server_status` | 只读 | 单服实时状态与资源占用 | — |
+| `list_players` | 只读 | 从控制台日志解析当前在线玩家 | — |
 | `list_files` | 只读 | 列出目录内容 | — |
 | `read_file` | 只读 | 读取文本文件 | — |
 | `download_file` | 只读 | 获取一次性下载链接（约 15 分钟） | — |

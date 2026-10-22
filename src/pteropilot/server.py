@@ -116,6 +116,15 @@ async def get_server_status(server_id: str) -> str:
 
 
 @mcp.tool()
+async def list_players(server_id: str) -> str:
+    """查当前在线的玩家：从最近控制台日志解析玩家加入/退出，列出在线名单。"""
+    players = await panel.online_players(server_id)
+    if not players:
+        return "(当前没有检测到在线玩家，或日志里没有玩家进出记录)"
+    return "当前在线玩家 (" + str(len(players)) + " 人):\n" + "\n".join(f"- {p}" for p in players)
+
+
+@mcp.tool()
 async def list_files(server_id: str, directory: str = "/") -> str:
     """列出服务器某目录下的文件与子目录（含大小、类型）。"""
     files = await panel.list_files(server_id, directory)
