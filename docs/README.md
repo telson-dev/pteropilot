@@ -137,7 +137,7 @@
 | `list_all_servers` | 只读【管理员】 | 列出面板全部服务器 | — |
 | `list_nodes` | 只读【管理员】 | 列出所有节点 | — |
 | `get_server_status` | 只读 | 单服实时状态与资源占用 | — |
-| `list_players` | 只读 | 从控制台日志解析当前在线玩家 | — |
+| `list_players` | 只读 | 从控制台日志解析当前在线玩家（非权威，基于最近约 1000 行日志推断，早于此的重启/退出可能被截断） | — |
 | `check_server_health` | 只读 | 对比 current_state 判定健康度（异常态给中文提示与建议） | — |
 | `list_files` | 只读 | 列出目录内容 | — |
 | `read_file` | 只读 | 读取文本文件 | — |

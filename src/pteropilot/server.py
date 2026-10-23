@@ -165,7 +165,12 @@ async def check_server_health(server_id: str) -> str:
 
 @mcp.tool()
 async def list_players(server_id: str) -> str:
-    """查当前在线的玩家：从最近控制台日志解析玩家加入/退出，列出在线名单。"""
+    """查当前在线的玩家：从最近控制台日志解析玩家加入/退出，列出在线名单。
+    
+    注意：此名单基于最近控制台日志推断，**非权威**。控制台读取端点通常只返回最近约 1000 行，
+    更早的玩家加入/退出或服务器重启可能已被截断，名单可能不完整或包含已离线的玩家。
+    需要权威在线人数时，请结合服务端权威来源（如 RCON / 面板资源接口）另行核实。
+    """
     players = await panel.online_players(server_id)
     if not players:
         return "(当前没有检测到在线玩家，或日志里没有玩家进出记录)"
