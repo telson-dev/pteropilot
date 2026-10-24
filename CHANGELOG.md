@@ -2,7 +2,7 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.2.2] - 2026-10-24
 
 ### Added
 - 新增 `list_players` 工具：从控制台日志解析玩家加入/退出，返回当前在线人员名单；兼容 Minecraft 原版 / Paper / Spigot / Forge / Fabric 的中英文日志格式（Roadmap「查玩家在线」第一优先项）。
