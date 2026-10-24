@@ -7,6 +7,7 @@
 ### Added
 - 新增 `list_players` 工具：从控制台日志解析玩家加入/退出，返回当前在线人员名单；兼容 Minecraft 原版 / Paper / Spigot / Forge / Fabric 的中英文日志格式（Roadmap「查玩家在线」第一优先项）。
 - 新增 `check_server_health` 工具：只读对比 `current_state` 判定健康度（healthy/transitional/abnormal/unknown），把离线/错误/挂起等异常态翻译成中文提示与建议动作，供 AI 判断是否告警（Roadmap「崩服告警」第二优先项）。
+- 新增 `batch_get_status` 工具：遍历我可访问的服务器，逐台返回「标识 | 名称 | 状态 | 健康等级」摘要；只读纯摘要、不扩展危险操作，单台超时/失败单独标注为「查询失败」不阻断整体（Roadmap「批量开服」第三优先项骨架）。
 
 ### Fixed
 - MCP 握手上报真实版本号 `0.2.1`（此前回退到 mcp 框架自身的 1.30.0）。

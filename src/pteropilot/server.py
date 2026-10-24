@@ -138,6 +138,41 @@ def classify_state(state: str) -> tuple[str, str]:
 
 
 @mcp.tool()
+async def batch_get_status() -> str:
+    """批量查看我可访问的所有服务器的状态与健康度摘要（Roadmap「批量开服」骨架）。
+
+    遍历当前 API Key 可访问的每台服务器，逐台返回一行「标识 | 名称 | 状态 | 健康等级」。
+    只读、纯摘要，不触碰任何写入/危险操作（批量操作暂不扩展，逐台 confirm 语义不变）。
+    单台调用超时或失败不会阻断整体，会单独标注为「查询失败」。
+    """
+    servers = await panel.client_servers()
+    if not servers:
+        return "(没有可访问的服务器)"
+
+    lines: list[str] = []
+    ok = 0
+    failed = 0
+    for s in servers:
+        a = _attrs(s)
+        ident = a.get("identifier") or a.get("uuid") or "?"
+        name = _name(a)
+        try:
+            res = await panel.resources(ident)
+            state = res.get("current_state", "?")
+            level, _hint = classify_state(state)
+            level_cn = {"healthy": "🟢", "transitional": "🟡", "abnormal": "🔴", "unknown": "⚪"}[level]
+            lines.append(f"- {ident} | {name} | {state} | {level_cn}")
+            ok += 1
+        except Exception:
+            # 单台失败（超时/无权限/面板报错）不阻断整体，标注后继续。
+            lines.append(f"- {ident} | {name} | 查询失败（超时或面板报错）")
+            failed += 1
+
+    header = f"共 {len(servers)} 台服务器，成功 {ok} 台、失败 {failed} 台："
+    return header + "\n" + "\n".join(lines)
+
+
+@mcp.tool()
 async def check_server_health(server_id: str) -> str:
     """检查服务器健康度：对比 current_state，把异常态翻译成中文结构化提示。
 
