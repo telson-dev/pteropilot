@@ -10,6 +10,7 @@
 - [Pelican 面板配置示例](#pelican-面板配置示例)
 - [工具一览](#工具一览)
 - [安全模型：只读模式与二次确认](#安全模型只读模式与二次确认)
+- [端点对照矩阵（Pterodactyl ↔ Pelican）](endpoint-matrix.md)
 - [故障排查 FAQ](#故障排查-faq)
 
 ---
