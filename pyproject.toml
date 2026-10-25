@@ -4,10 +4,42 @@ version = "0.2.2"
 description = "MCP server that lets AI agents manage game servers on Pterodactyl / Pelican panels"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "WinbowJi / telson" },
+]
+keywords = [
+  "mcp",
+  "model-context-protocol",
+  "pterodactyl",
+  "pelican",
+  "game-server",
+  "minecraft",
+  "server-management",
+  "ai-agents",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Communications :: Chat",
+  "Topic :: Games/Entertainment",
+  "Topic :: System :: Systems Administration",
+]
 dependencies = [
   "mcp>=1.2,<2",
   "httpx>=0.27",
 ]
+
+[project.urls]
+Homepage = "https://github.com/telson-dev/pteropilot"
+Repository = "https://github.com/telson-dev/pteropilot"
+Documentation = "https://github.com/telson-dev/pteropilot#readme"
+
 
 [project.scripts]
 pteropilot = "pteropilot.server:main"
