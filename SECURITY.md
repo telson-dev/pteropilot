@@ -64,3 +64,36 @@ in readonly mode but not confirmation-gated, because it is the product's core
 interactive path. Operators who need a hard stop should use readonly mode or a
 key without console permission.
 
+## Security Review — New read-only tools (2026-10-26)
+
+Scope: the three tools added after the 2026-10-20 audit — `list_players`,
+`check_server_health`, `batch_get_status` — verified against the same three
+questions, with regression tests in `tests/test_security_readonly_tools.py`.
+
+### 1. API key / sensitive-info exposure
+
+No leak. All three tools reach the panel only through `PanelClient` read methods
+(`online_players` → `console_log`, `resources`, `client_servers`), which all
+route through `_Guarded` → `redact()`. Panel error bodies and transport
+exceptions are therefore stripped of `Bearer <token>` and `ptlc_/ptla_/peli_`
+keys before reaching the model. `batch_get_status` goes further: its per-server
+try/except swallows the exception entirely and emits a generic
+「查询失败（超时或面板报错）」 line, with **no** error detail at all.
+
+### 2. Read-only enforcement / bypass
+
+No bypass path. These are read-only (GET-only) tools and deliberately do **not**
+call `_denied_if_readonly()` — that guard exists to block *write* operations, and
+there is nothing to block here. Verified that they issue only `GET` requests and
+never touch any write/dangerous client method (`power`, `send_command`,
+`write_file`, `delete_files`, `restore_backup`, `delete_backup`, `upload_file`,
+`create_folder`, `create_backup`). Running under `PANEL_READONLY=1` still works
+for all three, as intended.
+
+### 3. Internal detail leakage to the model
+
+None. Outputs contain only server identifiers, names, `current_state`, derived
+health level, and player names — no API key, no bearer token, no signed URLs.
+(Contrast `download_file`, which returns a short-lived signed URL and is treated
+as sensitive — that tool predates this review and is unchanged.)
+
