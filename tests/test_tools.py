@@ -90,6 +90,27 @@ async def test_stop_requires_confirm(fake):
     assert not any(r.method == "POST" for r in fake.requests)
 
 
+async def test_kill_requires_confirm(fake):
+    _bind(fake)
+    out = await srv.power_signal("s1", "kill")
+    assert "高危" in out
+    assert not any(r.method == "POST" for r in fake.requests)
+
+
+async def test_kill_with_confirm(fake):
+    _bind(fake)
+    fake.route("POST", "/power", {})
+    out = await srv.power_signal("s1", "kill", confirm=True)
+    assert "✅" in out
+
+
+async def test_kill_readonly(fake):
+    _bind(fake, readonly=True)
+    out = await srv.power_signal("s1", "kill", confirm=True)
+    assert "只读模式" in out
+    assert fake.requests == []
+
+
 async def test_start_does_not_need_confirm(fake):
     _bind(fake)
     fake.route("POST", "/power", {})

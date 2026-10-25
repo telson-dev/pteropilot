@@ -160,6 +160,13 @@ async def test_delete_backup_confirm(fake):
     assert "✅" in done
 
 
+async def test_delete_backup_readonly(fake):
+    _bind(fake, readonly=True)
+    out = await srv.delete_backup("s1", "b1", confirm=True)
+    assert "只读模式" in out
+    assert fake.requests == []
+
+
 async def test_upload_invalid_base64(fake):
     _bind(fake)
     out = await srv.upload_file("s1", "/", "a.jar", "!!!not-base64!!!", confirm=True)
