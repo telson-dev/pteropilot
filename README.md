@@ -85,7 +85,9 @@ that need a URL key), `--timeout <sec>`, `--no-log-signals` (state-only, faster)
 `--cooldown <minutes>` (dedupe: same server + same state is not re-notified
 within the cooldown; a state change always alerts immediately — prevents alert
 storms when cron runs every few minutes. State is persisted in
-`~/.pteropilot/alerts_state.json`).
+`~/.pteropilot/alerts_state.json`),
+`--confirm-count <n>` (require N consecutive abnormal detections before
+notifying — filters transient flaps; recovery resets the counter).
 
 Email channel (second notifier, can be combined with the webhook):
 

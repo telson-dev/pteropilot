@@ -123,22 +123,26 @@ async def scan_and_notify(
     smtp_password: str = "",
     smtp_to: str = "",
     smtp_from: str = "",
+    confirm_count: int = 1,
 ) -> dict:
     """扫描全部可访问服务器，异常者逐台推送告警（webhook 和/或邮件）。
 
     min_level: abnormal = 离线/错误/挂起等；error = 仅错误态。
     cooldown_minutes: >0 时启用冷却去重——同一服务器「状态没变 + 冷却期内」不重复推送；
                       状态发生变化则立即推送（新故障值得立刻知道）。
-    state_file: 冷却状态持久化位置（默认 ~/.pteropilot/alerts_state.json，仅冷却开启时使用）。
+    confirm_count: >1 时启用连续确认——同一服务器连续 N 次检测到异常才推送，
+                   避免瞬时抖动误报；恢复健康会清零计数。
+    state_file: 冷却/确认状态持久化位置（默认 ~/.pteropilot/alerts_state.json）。
     smtp_*: 邮件通道（host+user+password+to 齐了才会发邮件；可与 webhook 同时使用）。
-    返回 {checked, abnormal, notified, suppressed, errors}。
+    返回 {checked, abnormal, notified, suppressed, pending, errors}。
     """
     cfg = Config()
     cfg.validate()
     client = PanelClient(cfg, timeout=timeout)
     abnormal_states = {"error", "suspended"} if min_level == "error" else {"offline", "error", "suspended"}
 
-    if cooldown_minutes > 0:
+    use_state = cooldown_minutes > 0 or confirm_count > 1
+    if use_state:
         path = state_file or default_state_file()
         state = load_state(path)
     else:
@@ -151,6 +155,7 @@ async def scan_and_notify(
     abnormal = 0
     notified = 0
     suppressed = 0
+    pending = 0
     errors: list[str] = []
 
     try:
@@ -163,11 +168,23 @@ async def scan_and_notify(
                 state_now = res.get("current_state", "?")
                 level, _hint = classify_state(state_now)
                 if level != "abnormal" or state_now not in abnormal_states:
+                    # 健康：清零连续确认计数
+                    if state is not None and ident in state:
+                        state[ident]["hits"] = 0
                     continue
                 abnormal += 1
 
-                # 冷却去重：状态未变且仍在冷却期内 → 跳过
                 prev = (state or {}).get(ident, {}) if state else {}
+                hits = int(prev.get("hits") or 0) + 1
+
+                # 连续确认：未达到阈值 → 记录计数、暂不推送
+                if confirm_count > 1 and hits < confirm_count:
+                    if state is not None:
+                        state[ident] = {"state": state_now, "hits": hits, "ts": time.time()}
+                    pending += 1
+                    continue
+
+                # 冷却去重：状态未变且仍在冷却期内 → 跳过
                 changed = prev.get("state") != state_now
                 if state is not None and not changed:
                     elapsed = time.time() - float(prev.get("ts") or 0)
@@ -200,7 +217,7 @@ async def scan_and_notify(
                 if webhook or email_enabled:
                     notified += 1
                 if state is not None:
-                    state[ident] = {"state": state_now, "ts": time.time()}
+                    state[ident] = {"state": state_now, "hits": hits, "ts": time.time()}
             except Exception as exc:  # noqa: BLE001 - 单台失败不阻断整体
                 errors.append(f"{ident}: {type(exc).__name__}: {exc}")
     finally:
@@ -213,6 +230,7 @@ async def scan_and_notify(
         "abnormal": abnormal,
         "notified": notified,
         "suppressed": suppressed,
+        "pending": pending,
         "errors": errors,
     }
 
@@ -253,6 +271,7 @@ def main() -> None:
     parser.add_argument("--smtp-pass", default=os.environ.get("SMTP_PASS", ""), help="SMTP 密码/授权码")
     parser.add_argument("--mail-to", default=os.environ.get("MAIL_TO", ""), help="收件人邮箱")
     parser.add_argument("--mail-from", default=os.environ.get("MAIL_FROM", ""), help="发件人邮箱（默认同 smtp-user）")
+    parser.add_argument("--confirm-count", type=int, default=int(os.environ.get("CONFIRM_COUNT", "1")), help="连续确认阈值：同一服务器连续 N 次检测异常才推送（默认 1 = 立即推送；设 2+ 防瞬时抖动误报）")
     args = parser.parse_args()
 
     if not args.webhook and not (args.smtp_host and args.smtp_user and args.mail_to):
@@ -272,6 +291,7 @@ def main() -> None:
             smtp_password=args.smtp_pass,
             smtp_to=args.mail_to,
             smtp_from=args.mail_from,
+            confirm_count=args.confirm_count,
         )
     )
     channels = []
@@ -283,6 +303,7 @@ def main() -> None:
         f"扫描完成（通知渠道: {'+'.join(channels) or '无'}）：检查 {result['checked']} 台，"
         f"异常 {result['abnormal']} 台，已推送 {result['notified']} 台"
         + (f"，冷却跳过 {result['suppressed']} 台" if result["suppressed"] else "")
+        + (f"，确认中 {result['pending']} 台" if result["pending"] else "")
     )
     for e in result["errors"]:
         print(f"  查询失败: {e}")
