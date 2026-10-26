@@ -270,3 +270,97 @@ async def test_cooldown_disabled_by_default(fake, env_panel, monkeypatch, tmp_pa
     second = await alerts.scan_and_notify("https://hook.example/send")
     assert first["notified"] == 1 and second["notified"] == 1  # 默认不冷却 → 每次都推
     assert len(notified) == 2
+
+
+# ================= 邮件渠道（阶段四）=================
+
+
+class FakeSMTP:
+    def __init__(self, *a, **k):
+        self.sent = []
+        self.started = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def starttls(self):
+        self.started = True
+
+    def login(self, user, password):
+        self.creds = (user, password)
+
+    def send_message(self, msg):
+        self.sent.append(msg)
+
+
+def test_send_email_ssl(monkeypatch):
+    fake = FakeSMTP()
+    monkeypatch.setattr(alerts.smtplib, "SMTP_SSL", lambda host, port, timeout: fake)
+    alerts.send_email(
+        to="ops@x.com", subject="PteroPilot 告警", content="服务器 s1 离线",
+        host="smtp.example.com", user="bot@x.com", password="pw", port=465,
+    )
+    assert len(fake.sent) == 1
+    msg = fake.sent[0]
+    assert msg["To"] == "ops@x.com"
+    assert msg["From"] == "bot@x.com"
+    assert "服务器 s1 离线" in msg.get_content()
+    assert fake.creds == ("bot@x.com", "pw")
+
+
+def test_send_email_starttls_port587(monkeypatch):
+    fake = FakeSMTP()
+    monkeypatch.setattr(alerts.smtplib, "SMTP", lambda host, port, timeout: fake)
+    alerts.send_email(
+        to="ops@x.com", subject="s", content="c",
+        host="smtp.example.com", user="u", password="p", port=587,
+    )
+    assert fake.started is True  # STARTTLS
+
+
+async def test_scan_notifies_email_channel(fake, env_panel, monkeypatch):
+    emails = []
+
+    async def spy_email(to, subject, content, host, user, password, port=465, frm=None):
+        emails.append((to, subject))
+
+    monkeypatch.setattr(alerts, "send_email", spy_email)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    result = await alerts.scan_and_notify(
+        webhook="",
+        smtp_host="smtp.example.com",
+        smtp_user="u",
+        smtp_password="p",
+        smtp_to="ops@x.com",
+    )
+    assert result["notified"] == 1
+    assert len(emails) == 1
+    assert emails[0][0] == "ops@x.com"
+    assert "s1" in emails[0][1]
+
+
+async def test_scan_no_channel_skips_notify(fake, env_panel, monkeypatch):
+    notified = []
+
+    async def spy_email(*a, **k):
+        notified.append(("email", a))
+
+    async def spy_webhook(*a, **k):
+        notified.append(("webhook", a))
+
+    monkeypatch.setattr(alerts, "send_email", spy_email)
+    monkeypatch.setattr(alerts, "send_webhook", spy_webhook)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    result = await alerts.scan_and_notify(webhook="")  # 无任何渠道
+    assert result["notified"] == 0
+    assert result["abnormal"] == 1
+    assert notified == []

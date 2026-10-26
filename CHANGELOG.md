@@ -7,6 +7,7 @@
 ### Added
 - 新增 `pteropilot-alerts` 命令（`pteropilot.alerts` 模块）：只读扫描全部可访问服务器，异常/崩溃（状态级 `check_server_health` + 日志级 `diagnose_crash`）时向钉钉/企业微信机器人 webhook 推送通知；`--min-level`/`--token`/`--timeout`/`--no-log-signals` 可配，适合 cron 定时执行（Roadmap「崩服告警」阶段二：可配置通知通道）。
 - `pteropilot-alerts` 新增告警冷却去重（`--cooldown <分钟>`，状态存 `~/.pteropilot/alerts_state.json`）：同一服务器同状态下冷却期内不重复推送，状态变化立即推送——防告警风暴（Roadmap「崩服告警」阶段三）。
+- `pteropilot-alerts` 新增**邮件渠道**（`--smtp-host/--smtp-user/--smtp-pass/--mail-to`，465 SSL / 587 STARTTLS；环境变量 `SMTP_*`/`MAIL_TO` 可配）：与 webhook 可同时使用，双通道互备（Roadmap「崩服告警」阶段四）。
 
 ## [0.2.3] - 2026-10-26
 

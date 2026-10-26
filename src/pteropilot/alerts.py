@@ -1,9 +1,13 @@
-"""PteroPilot 告警：把「崩服检测」变成可配置的通知（Roadmap「崩服告警」阶段二/三）。
+"""PteroPilot 告警：把「崩服检测」变成可配置的通知（Roadmap「崩服告警」阶段二/三/四）。
 
 用法（配合 cron / 定时任务，每几分钟跑一次）：
 
     PANEL_URL=... PANEL_API_KEY=... \
     pteropilot-alerts --webhook https://oapi.dingtalk.com/robot/send?access_token=xxx
+
+    # 邮件渠道（webhook 之外的第二通道，可与 webhook 同时用）：
+    #   --smtp-host smtp.example.com --smtp-user you@x.com --smtp-pass xxx --mail-to ops@x.com
+    #   --smtp-port 465（SSL，默认）| 587（STARTTLS）
 
     # 可选：--min-level abnormal（默认，只报异常态）| error（仅错误态）
     #       --token xxx（企业微信等需要在 URL 上拼 key 的场景）
@@ -19,7 +23,9 @@ import argparse
 import asyncio
 import json
 import os
+import smtplib
 import time
+from email.message import EmailMessage
 from pathlib import Path
 
 import httpx
@@ -76,20 +82,55 @@ async def send_webhook(url: str, content: str, token: str | None = None) -> None
         r.raise_for_status()
 
 
+def send_email(
+    to: str,
+    subject: str,
+    content: str,
+    host: str,
+    user: str,
+    password: str,
+    port: int = 465,
+    frm: str | None = None,
+) -> None:
+    """发送一封告警邮件（465 = SSL，587 = STARTTLS）。"""
+    frm = frm or user
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = frm
+    msg["To"] = to
+    msg.set_content(content)
+    if port == 587:
+        with smtplib.SMTP(host, port, timeout=15.0) as s:
+            s.starttls()
+            s.login(user, password)
+            s.send_message(msg)
+    else:
+        with smtplib.SMTP_SSL(host, port, timeout=15.0) as s:
+            s.login(user, password)
+            s.send_message(msg)
+
+
 async def scan_and_notify(
-    webhook: str,
+    webhook: str = "",
     min_level: str = "abnormal",
     timeout: float = 30.0,
     include_log_signals: bool = True,
     cooldown_minutes: float = 0.0,
     state_file: Path | None = None,
+    smtp_host: str = "",
+    smtp_port: int = 465,
+    smtp_user: str = "",
+    smtp_password: str = "",
+    smtp_to: str = "",
+    smtp_from: str = "",
 ) -> dict:
-    """扫描全部可访问服务器，异常者逐台推送告警。
+    """扫描全部可访问服务器，异常者逐台推送告警（webhook 和/或邮件）。
 
     min_level: abnormal = 离线/错误/挂起等；error = 仅错误态。
     cooldown_minutes: >0 时启用冷却去重——同一服务器「状态没变 + 冷却期内」不重复推送；
                       状态发生变化则立即推送（新故障值得立刻知道）。
     state_file: 冷却状态持久化位置（默认 ~/.pteropilot/alerts_state.json，仅冷却开启时使用）。
+    smtp_*: 邮件通道（host+user+password+to 齐了才会发邮件；可与 webhook 同时使用）。
     返回 {checked, abnormal, notified, suppressed, errors}。
     """
     cfg = Config()
@@ -103,6 +144,8 @@ async def scan_and_notify(
     else:
         path = None
         state = None
+
+    email_enabled = bool(smtp_host and smtp_user and smtp_to)
 
     checked = 0
     abnormal = 0
@@ -140,8 +183,22 @@ async def scan_and_notify(
                             details.append(diag)
                     except Exception:
                         details.append("（日志读取失败，跳过日志级信号）")
-                await send_webhook(webhook, build_alert_message(ident, state_now, details))
-                notified += 1
+                message = build_alert_message(ident, state_now, details)
+                if webhook:
+                    await send_webhook(webhook, message)
+                if email_enabled:
+                    await send_email(
+                        to=smtp_to,
+                        subject=f"PteroPilot 告警：服务器 {ident} 状态异常（{state_now}）",
+                        content=message,
+                        host=smtp_host,
+                        user=smtp_user,
+                        password=smtp_password,
+                        port=smtp_port,
+                        frm=smtp_from or None,
+                    )
+                if webhook or email_enabled:
+                    notified += 1
                 if state is not None:
                     state[ident] = {"state": state_now, "ts": time.time()}
             except Exception as exc:  # noqa: BLE001 - 单台失败不阻断整体
@@ -190,10 +247,16 @@ def main() -> None:
     parser.add_argument("--no-log-signals", action="store_true", help="不读取日志级崩溃信号（更快，只按状态判断）")
     parser.add_argument("--cooldown", type=float, default=0.0, help="告警冷却（分钟）：同一服务器同状态下限时间内不重复推送，防告警风暴")
     parser.add_argument("--state-file", default=None, help="冷却状态文件路径（默认 ~/.pteropilot/alerts_state.json）")
+    parser.add_argument("--smtp-host", default=os.environ.get("SMTP_HOST", ""), help="SMTP 服务器（邮件通道）")
+    parser.add_argument("--smtp-port", type=int, default=int(os.environ.get("SMTP_PORT", "465")), help="SMTP 端口（465=SSL 默认，587=STARTTLS）")
+    parser.add_argument("--smtp-user", default=os.environ.get("SMTP_USER", ""), help="SMTP 用户名")
+    parser.add_argument("--smtp-pass", default=os.environ.get("SMTP_PASS", ""), help="SMTP 密码/授权码")
+    parser.add_argument("--mail-to", default=os.environ.get("MAIL_TO", ""), help="收件人邮箱")
+    parser.add_argument("--mail-from", default=os.environ.get("MAIL_FROM", ""), help="发件人邮箱（默认同 smtp-user）")
     args = parser.parse_args()
 
-    if not args.webhook:
-        parser.error("需要 --webhook 或环境变量 WEBHOOK_URL")
+    if not args.webhook and not (args.smtp_host and args.smtp_user and args.mail_to):
+        parser.error("至少需要一种通知渠道：--webhook，或完整的 SMTP 邮件配置（--smtp-host/--smtp-user/--smtp-pass/--mail-to）")
 
     result = asyncio.run(
         scan_and_notify(
@@ -203,11 +266,23 @@ def main() -> None:
             include_log_signals=not args.no_log_signals,
             cooldown_minutes=args.cooldown,
             state_file=Path(args.state_file) if args.state_file else None,
+            smtp_host=args.smtp_host,
+            smtp_port=args.smtp_port,
+            smtp_user=args.smtp_user,
+            smtp_password=args.smtp_pass,
+            smtp_to=args.mail_to,
+            smtp_from=args.mail_from,
         )
     )
+    channels = []
+    if args.webhook:
+        channels.append("webhook")
+    if args.smtp_host and args.smtp_user and args.mail_to:
+        channels.append("邮件")
     print(
-        f"扫描完成：检查 {result['checked']} 台，异常 {result['abnormal']} 台，"
-        f"已推送 {result['notified']} 台" + (f"，冷却跳过 {result['suppressed']} 台" if result["suppressed"] else "")
+        f"扫描完成（通知渠道: {'+'.join(channels) or '无'}）：检查 {result['checked']} 台，"
+        f"异常 {result['abnormal']} 台，已推送 {result['notified']} 台"
+        + (f"，冷却跳过 {result['suppressed']} 台" if result["suppressed"] else "")
     )
     for e in result["errors"]:
         print(f"  查询失败: {e}")

@@ -86,6 +86,15 @@ that need a URL key), `--timeout <sec>`, `--no-log-signals` (state-only, faster)
 within the cooldown; a state change always alerts immediately — prevents alert
 storms when cron runs every few minutes. State is persisted in
 `~/.pteropilot/alerts_state.json`).
+
+Email channel (second notifier, can be combined with the webhook):
+
+```bash
+pteropilot-alerts \
+  --smtp-host smtp.example.com --smtp-user you@x.com --smtp-pass <auth-code> \
+  --mail-to ops@x.com            # --smtp-port 587 for STARTTLS (default 465 SSL)
+```
+
 Only GET requests are issued; no power/command/write actions are ever triggered.
 
 ## Run from source
