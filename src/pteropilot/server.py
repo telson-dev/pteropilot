@@ -198,6 +198,76 @@ async def check_server_health(server_id: str) -> str:
     )
 
 
+# 崩溃信号关键词表（小写匹配，按类别归类）。
+# 宁可漏报也不误报：只收录明确的崩溃/异常措辞，避免把普通警告当崩溃。
+_CRASH_PATTERNS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "memory": (
+        "内存不足（Out of Memory）",
+        ("out of memory", "outofmemory", "oom-kill", "cannot allocate memory", "memory exhausted", "unable to allocate"),
+    ),
+    "jvm": (
+        "JVM 崩溃",
+        ("hs_err_pid", "fatal error has been detected", "exception in thread", "java.lang.outofmemoryerror"),
+    ),
+    "exit": (
+        "进程异常退出",
+        ("process exited with code", "exit code", "server thread has stopped", "shutting down the server with an error"),
+    ),
+    "fatal": (
+        "致命错误",
+        ("a fatal error", "crash report", "crash-reports", "fatal: unable"),
+    ),
+}
+
+
+@mcp.tool()
+async def diagnose_crash(server_id: str, tail: int = 60) -> str:
+    """诊断服务器是否崩溃/异常（Roadmap「崩服告警」检测点，只读）。
+
+    结合当前状态与最近控制台日志：扫描日志中的崩溃信号（内存不足 / JVM 崩溃 /
+    进程异常退出 / 致命错误），输出检测结果、命中行数与建议动作。
+    供 AI 判断是否需要提醒用户或执行恢复（如 power_signal start）。
+    只读、不发外部告警；tail 控制扫描的日志行数。
+    """
+    res = await panel.resources(server_id)
+    state = res.get("current_state", "?")
+    level, _hint = classify_state(state)
+    level_cn = {"healthy": "🟢 正常", "transitional": "🟡 中间态", "abnormal": "🔴 异常", "unknown": "⚪ 未知"}[level]
+
+    log = await panel.console_log(server_id)
+    recent = log.splitlines()[-max(tail, 1):]
+
+    hits: dict[str, tuple[str, list[str]]] = {}
+    for ln in recent:
+        low = ln.lower()
+        for cat, (label, kws) in _CRASH_PATTERNS.items():
+            if any(k in low for k in kws):
+                if cat not in hits:
+                    hits[cat] = (label, [])
+                hits[cat][1].append(ln)
+
+    out = [f"服务器: {server_id}", f"当前状态: {state}", f"健康度: {level_cn}"]
+    if hits:
+        out.append(f"崩溃信号: {len(hits)} 类")
+        for cat, (label, matched) in hits.items():
+            out.append(f"  - {label}: 命中 {len(matched)} 行，最近一条: {matched[-1][:160]}")
+        if sum(len(m) for _, m in hits.values()) >= 3:
+            out.append("疑似反复崩溃（短时间内多次出现崩溃信号），建议优先处理。")
+    else:
+        out.append("崩溃信号: 未发现（最近日志中未见明显崩溃措辞）")
+
+    out.append("最近日志（尾部，最多 10 行）:")
+    out.append("\n".join(recent[-10:]) or "(日志为空)")
+
+    if level == "abnormal":
+        out.append("建议: ① 依据上方信号定位原因；② 确认后可用 power_signal start 拉起；③ 反复崩溃请检查内存/启动参数。")
+    elif hits:
+        out.append("建议: 日志发现崩溃信号但当前状态正常，可能是历史残留或即将崩溃，建议观察或重启排查。")
+    else:
+        out.append("建议: 状态正常且无崩溃信号，无需干预。")
+    return "\n".join(out)
+
+
 @mcp.tool()
 async def list_players(server_id: str) -> str:
     """查当前在线的玩家：从最近控制台日志解析玩家加入/退出，列出在线名单。
