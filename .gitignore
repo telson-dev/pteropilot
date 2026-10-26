@@ -17,6 +17,7 @@ promo/
 tmp_check.js
 docs/aegis/
 .coverage
+*.spec
 
 # 内部立项卡（含商业模式/竞品/退路），不进公开仓库
 CHARTER.md
