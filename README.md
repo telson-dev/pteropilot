@@ -60,6 +60,30 @@ Then just talk to your AI naturally, for example:
 - "When was the latest backup on smp? Create one if missing"
 - "Upload this plugin to the creative server and restart it"
 
+## Crash alerts (webhook)
+
+The `pteropilot-alerts` command scans your servers read-only and pushes a
+notification to a DingTalk / WeCom (WeChat Work) group-bot webhook when a server
+is in an abnormal state (offline / error / suspended) or its recent console log
+shows crash signals. Perfect for cron:
+
+```bash
+# install
+uv tool install pteropilot
+
+# test once
+PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
+  pteropilot-alerts --webhook "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+
+# run every 5 minutes
+*/5 * * * * PANEL_URL=... PANEL_API_KEY=... pteropilot-alerts \
+  --webhook "https://oapi.dingtalk.com/robot/send?access_token=xxx" >> /var/log/pteropilot-alerts.log 2>&1
+```
+
+Options: `--min-level error` (only error state), `--token <key>` (WeCom bots
+that need a URL key), `--timeout <sec>`, `--no-log-signals` (state-only, faster).
+Only GET requests are issued; no power/command/write actions are ever triggered.
+
 ## Run from source
 
 ```bash

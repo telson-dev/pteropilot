@@ -43,6 +43,7 @@ Documentation = "https://github.com/telson-dev/pteropilot#readme"
 
 [project.scripts]
 pteropilot = "pteropilot.server:main"
+pteropilot-alerts = "pteropilot.alerts:main"
 
 [dependency-groups]
 dev = [
