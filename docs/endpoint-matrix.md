@@ -46,6 +46,7 @@
 | `list_my_servers` | `client_servers()` | GET | `/api/client`（根路径） | 分页，`data[]`，`attributes` 含 `identifier`/`name`/`uuid` | Pelican 源码 |
 | `get_server_status` | `resources()` | GET | `/api/client/servers/{server}/resources` | 返回 `{ attributes: { current_state, resources: {...} } }`；代码做了 `attributes` 兜底 | Pelican 源码 |
 | `power_signal` | `power()` | POST | `/api/client/servers/{server}/power` | body `{"signal": "start|stop|restart|kill"}` | Pelican 源码 |
+| `batch_power` | `power()`（逐台循环） | POST | `/api/client/servers/{server}/power` × N | 无原生批量端点，客户端循环调用单台 `power()`；整体 confirm 门禁在工具层 | Pelican 源码 |
 | `get_console_log` | `console_log()` | GET | `/api/client/servers/{server}/console` | 返回**纯文本**（非 JSON） | Pelican 源码 |
 | `send_command` | `send_command()` | POST | `/api/client/servers/{server}/command` | body `{"command": "..."}` | Pelican 源码 |
 

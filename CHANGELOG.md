@@ -2,6 +2,11 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+- 新增 `batch_power` 工具：批量对一组服务器发电源信号（start/stop/restart/kill）。面板无原生批量电源端点，退化为「逐台循环调用单台 power + 整体二次确认」；只读模式下整体拒绝、非法 signal 整体拒绝、stop/restart/kill 需整体 confirm=True（start 免确认）、单台失败单独标注不阻断其余（Roadmap「批量开服」写路径收尾）。
+
 ## [0.2.2] - 2026-10-24
 
 ### Added

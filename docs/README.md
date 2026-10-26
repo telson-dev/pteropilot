@@ -147,6 +147,7 @@
 | `list_backups` | 只读 | 列出备份 | — |
 | `get_console_log` | 只读 | 读取控制台最近日志 | — |
 | `power_signal` | 写入 | start / stop / restart / kill | stop/restart/kill ✅ |
+| `batch_power` | 写入 | 批量对一组服务器发电源信号（逐台循环、单台失败不阻断整体） | stop/restart/kill ✅ |
 | `send_command` | 写入 | 发控制台指令 | — |
 | `write_file` | 写入 | 写入文本文件（覆盖需确认） | 覆盖 ✅ |
 | `delete_files` | 写入 | 删除文件/目录 | ✅ |

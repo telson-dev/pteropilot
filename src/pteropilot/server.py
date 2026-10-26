@@ -281,6 +281,47 @@ async def power_signal(server_id: str, signal: str, confirm: bool = False) -> st
 
 
 @mcp.tool()
+async def batch_power(server_ids: list[str], signal: str, confirm: bool = False) -> str:
+    """批量控制一组服务器的电源（Roadmap「批量开服」写路径收尾）。
+
+    面板 API 无原生批量电源端点（Pterodactyl/Pelican 都只有单台
+    `/api/client/servers/{id}/power`），故退化为「逐台循环调用单台 power + 整体二次确认」：
+
+    - 只读模式下整体拒绝，不发出任何请求；
+    - signal 非法则整体拒绝；
+    - stop/restart/kill 需整体 confirm=True（一次确认覆盖整批，start 免确认）；
+    - 逐台 apply，单台失败（超时/无权限/面板报错）单独标注、不阻断其余服务器。
+    """
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+    if not server_ids:
+        return "(未指定任何服务器)"
+    if signal not in POWER_SIGNALS:
+        return f"非法信号 {signal}，可选: {', '.join(POWER_SIGNALS)}"
+    if signal in ("stop", "restart", "kill"):
+        blocked = _need_confirm(confirm, f"批量 {signal}（{len(server_ids)} 台服务器）")
+        if blocked:
+            return blocked
+
+    ok = 0
+    failed = 0
+    lines: list[str] = []
+    for sid in server_ids:
+        try:
+            await panel.power(sid, signal)
+            lines.append(f"- {sid} | ✅ 已发送 {signal}")
+            ok += 1
+        except Exception:
+            # 单台失败不阻断整体，标注后继续。
+            lines.append(f"- {sid} | ❌ 失败（无权限/超时/面板报错）")
+            failed += 1
+
+    header = f"批量 {signal}：共 {len(server_ids)} 台，成功 {ok} 台、失败 {failed} 台："
+    return header + "\n" + "\n".join(lines)
+
+
+@mcp.tool()
 async def get_console_log(server_id: str, max_chars: int = 8000) -> str:
     """读取服务器控制台最近的日志输出（用于查看指令回馈、报错、启动引导）。"""
     log = await panel.console_log(server_id)
