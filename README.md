@@ -81,7 +81,11 @@ PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
 ```
 
 Options: `--min-level error` (only error state), `--token <key>` (WeCom bots
-that need a URL key), `--timeout <sec>`, `--no-log-signals` (state-only, faster).
+that need a URL key), `--timeout <sec>`, `--no-log-signals` (state-only, faster),
+`--cooldown <minutes>` (dedupe: same server + same state is not re-notified
+within the cooldown; a state change always alerts immediately — prevents alert
+storms when cron runs every few minutes. State is persisted in
+`~/.pteropilot/alerts_state.json`).
 Only GET requests are issued; no power/command/write actions are ever triggered.
 
 ## Run from source

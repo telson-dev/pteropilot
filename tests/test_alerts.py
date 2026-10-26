@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 import httpx
 import pytest
@@ -138,7 +139,7 @@ async def test_scan_no_servers(fake, env_panel, monkeypatch):
     monkeypatch.setattr(alerts, "send_webhook", spy)
     fake.route("GET", "/api/client", _servers_payload([]))
     result = await alerts.scan_and_notify("https://hook.example/send")
-    assert result == {"checked": 0, "abnormal": 0, "notified": 0, "errors": []}
+    assert result == {"checked": 0, "abnormal": 0, "notified": 0, "suppressed": 0, "errors": []}
 
 
 async def test_scan_single_failure_not_blocking(fake, env_panel, monkeypatch):
@@ -174,3 +175,98 @@ async def test_scan_log_failure_keeps_state_alert(fake, env_panel, monkeypatch):
     result = await alerts.scan_and_notify("https://hook.example/send")
     assert result["notified"] == 1
     assert "日志读取失败" in notified[0]
+
+
+# ================= 冷却去重（阶段三）=================
+
+
+def test_state_file_roundtrip(tmp_path):
+    p = tmp_path / "state.json"
+    assert alerts.load_state(p) == {}
+    alerts.save_state(p, {"s1": {"state": "offline", "ts": 123.0}})
+    loaded = alerts.load_state(p)
+    assert loaded["s1"]["state"] == "offline"
+    assert loaded["s1"]["ts"] == 123.0
+
+
+async def test_cooldown_suppresses_duplicate(fake, env_panel, monkeypatch, tmp_path):
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    state_file = tmp_path / "state.json"
+    first = await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
+    assert first["notified"] == 1
+    assert first["suppressed"] == 0
+    assert state_file.exists()
+
+    second = await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
+    assert second["notified"] == 0
+    assert second["suppressed"] == 1  # 同状态 + 冷却期内 → 去重
+    assert len(notified) == 1
+
+
+async def test_state_change_notifies_immediately(fake, env_panel, monkeypatch, tmp_path):
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    # 注意路由顺序：resources/console 必须注册在父路由 /api/client 之前
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    state_file = tmp_path / "state.json"
+    first = await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
+    assert first["notified"] == 1
+    # 把历史状态改成 running（与当前不同）→ 状态变化是「新故障」，冷却期内也立即推送
+    alerts.save_state(state_file, {"s1": {"state": "running", "ts": time.time()}})
+    second = await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
+    assert second["notified"] == 1
+    assert second["suppressed"] == 0
+    assert "offline" in notified[-1]
+
+
+async def test_cooldown_expiry_notifies_again(fake, env_panel, monkeypatch, tmp_path):
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    state_file = tmp_path / "state.json"
+    await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
+    # 把状态文件里的时间改到很久以前 → 冷却过期 → 再次推送
+    alerts.save_state(state_file, {"s1": {"state": "offline", "ts": time.time() - 3600}})
+    second = await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
+    assert second["notified"] == 1
+    assert len(notified) == 2
+
+
+async def test_cooldown_disabled_by_default(fake, env_panel, monkeypatch, tmp_path):
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    first = await alerts.scan_and_notify("https://hook.example/send")
+    second = await alerts.scan_and_notify("https://hook.example/send")
+    assert first["notified"] == 1 and second["notified"] == 1  # 默认不冷却 → 每次都推
+    assert len(notified) == 2
