@@ -227,6 +227,56 @@ def test_redact_replaces_key_shapes():
     assert redact("no secrets here") == "no secrets here"
 
 
+# ---------- webhook 签名 query 脱敏（O2 安全加固，模块级纯函数单测） ----------
+
+
+def test_redact_strips_dingtalk_access_token():
+    """redact() 应把钉钉机器人 URL 里的 access_token 签名替换为 ***。"""
+    from pteropilot.client import redact
+
+    i_token = "SECRET" + "TOKEN123"  # 拆散构造，避免整段 key-shaped 字面量在工具写入时被脱敏
+    out = redact("https://oapi.dingtalk.com/robot/send?access_token=" + i_token)
+    assert i_token not in out
+    assert "access_token" not in out
+    assert out.endswith("?***")
+
+
+def test_redact_strips_wecom_key_token():
+    """redact() 应把企业微信机器人 URL 里的 ?key=/&key= 签名替换为 ***，其余 query 保留。"""
+    from pteropilot.client import redact
+
+    i_token = "SECRET" + "KEY456"
+    out = redact("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=" + i_token)
+    assert i_token not in out
+    assert "key" not in out
+    assert out.endswith("send***")
+
+    out2 = redact("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?foo=1&key=" + i_token)
+    assert i_token not in out2
+    assert "key" not in out2
+    assert out2.endswith("send?foo=1***")
+
+
+def test_redact_does_not_overmatch_plain_url():
+    """redact() 不应误伤不含签名的普通 URL / query 参数。"""
+    from pteropilot.client import redact
+
+    url = "https://panel.example.com/api/client/servers/s1/files?directory=/home/container"
+    assert redact(url) == url
+    assert "***" not in redact(url)
+
+
+def test_redact_access_token_preserves_other_query_params():
+    """脱敏 access_token 后，其余 query 参数与 URL 主体应保留。"""
+    from pteropilot.client import redact
+
+    i_token = "SECRET" + "TOKEN123"
+    out = redact("https://oapi.dingtalk.com/robot/send?access_token=" + i_token + "&timestamp=1")
+    assert "oapi.dingtalk.com/robot/send" in out
+    assert "timestamp=1" in out
+    assert i_token not in out
+
+
 def test_config_repr_hides_api_key():
     cfg = Config(panel_url="https://panel", panel_api_key="ptlc_" + "topsecret")
     shown = repr(cfg)

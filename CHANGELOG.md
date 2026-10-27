@@ -4,7 +4,8 @@
 
 ## [Unreleased]
 
-（暂无）
+### Security
+- 密钥脱敏加固：新增 `client.redact()` 对 webhook 签名 query（钉钉 `access_token=`、企业微信 `[?&]key=`）的统一脱敏，防止带签名的机器人 URL 在推送失败时随 `httpx` 异常信息/`errors` 泄露；补充模块级纯函数单测（`tests/test_guarded.py`）。
 
 ## [0.2.4] - 2026-10-28
 
