@@ -13,6 +13,17 @@
     #       --token xxx（企业微信等需要在 URL 上拼 key 的场景）
     #       --timeout 30（单台服务器查询超时，秒）
     #       --cooldown 30（分钟：同一服务器同状态下限时间内不重复推送，防告警风暴）
+    #       --confirm-count 3（连续确认阈值，过滤瞬时抖动）
+    #       --config ~/.pteropilot/alerts.json（按服务器级别覆盖灵敏度，见下方 JSON 示例）
+
+# 按服务器级别配置示例（~/.pteropilot/alerts.json，可选；优先级：服务器 > default > 命令行参数）：
+# {
+#   "default":      { "confirm_count": 2, "cooldown_minutes": 15 },
+#   "servers": {
+#     "smp":        { "confirm_count": 3, "cooldown_minutes": 60 },
+#     "creative":   { "min_level": "error" }
+#   }
+# }
 
 只读：本模块绝不发电源/指令等写操作，只查询状态与日志、推送通知。
 """
@@ -40,6 +51,44 @@ DEFAULT_WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 def default_state_file() -> Path:
     """冷却状态文件默认位置：~/.pteropilot/alerts_state.json"""
     return Path.home() / ".pteropilot" / "alerts_state.json"
+
+
+def default_config_file() -> Path:
+    """按服务器级别配置默认位置：~/.pteropilot/alerts.json"""
+    return Path.home() / ".pteropilot" / "alerts.json"
+
+
+def load_alerts_config(path: Path | None) -> dict:
+    """读取按服务器级别配置；文件不存在或损坏时返回空配置。"""
+    if path is None:
+        path = default_config_file()
+    try:
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(cfg, dict):
+            return cfg
+        return {}
+    except Exception:
+        return {}
+
+
+def server_effective(cfg: dict, server_id: str, confirm_count: int, cooldown_minutes: float, min_level: str) -> dict:
+    """合并服务器配置：服务器条目 > default 段 > 命令行/函数参数。"""
+    merged = {
+        "confirm_count": confirm_count,
+        "cooldown_minutes": cooldown_minutes,
+        "min_level": min_level,
+    }
+    dft = cfg.get("default") or {}
+    for key in ("confirm_count", "cooldown_minutes", "min_level"):
+        if key in dft:
+            merged[key] = dft[key]
+    srv = (cfg.get("servers") or {}).get(server_id) or {}
+    for key in ("confirm_count", "cooldown_minutes", "min_level"):
+        if key in srv:
+            merged[key] = srv[key]
+    merged["confirm_count"] = int(merged["confirm_count"])
+    merged["cooldown_minutes"] = float(merged["cooldown_minutes"])
+    return merged
 
 
 def load_state(path: Path) -> dict:
@@ -124,6 +173,7 @@ async def scan_and_notify(
     smtp_to: str = "",
     smtp_from: str = "",
     confirm_count: int = 1,
+    config_file: Path | None = None,
 ) -> dict:
     """扫描全部可访问服务器，异常者逐台推送告警（webhook 和/或邮件）。
 
@@ -139,9 +189,9 @@ async def scan_and_notify(
     cfg = Config()
     cfg.validate()
     client = PanelClient(cfg, timeout=timeout)
-    abnormal_states = {"error", "suspended"} if min_level == "error" else {"offline", "error", "suspended"}
+    alerts_cfg = load_alerts_config(config_file)
 
-    use_state = cooldown_minutes > 0 or confirm_count > 1
+    use_state = cooldown_minutes > 0 or confirm_count > 1 or bool(alerts_cfg)
     if use_state:
         path = state_file or default_state_file()
         state = load_state(path)
@@ -166,6 +216,10 @@ async def scan_and_notify(
             try:
                 res = await client.resources(ident)
                 state_now = res.get("current_state", "?")
+                eff = server_effective(alerts_cfg, ident, confirm_count, cooldown_minutes, min_level)
+                abnormal_states = {"error", "suspended"} if eff["min_level"] == "error" else {"offline", "error", "suspended"}
+                cc = eff["confirm_count"]
+                cd = eff["cooldown_minutes"]
                 level, _hint = classify_state(state_now)
                 if level != "abnormal" or state_now not in abnormal_states:
                     # 健康：清零连续确认计数
@@ -177,10 +231,10 @@ async def scan_and_notify(
                 prev = (state or {}).get(ident, {}) if state else {}
                 hits = int(prev.get("hits") or 0) + 1
 
-                # 连续确认：未达到阈值 → 记录计数、暂不推送
-                if confirm_count > 1 and hits < confirm_count:
+                # 连续确认：未达到阈值 → 记录计数、暂不推送（不推进通知时钟 ts）
+                if cc > 1 and hits < cc:
                     if state is not None:
-                        state[ident] = {"state": state_now, "hits": hits, "ts": time.time()}
+                        state[ident] = {"state": state_now, "hits": hits}
                     pending += 1
                     continue
 
@@ -188,7 +242,7 @@ async def scan_and_notify(
                 changed = prev.get("state") != state_now
                 if state is not None and not changed:
                     elapsed = time.time() - float(prev.get("ts") or 0)
-                    if elapsed < cooldown_minutes * 60:
+                    if elapsed < cd * 60:
                         suppressed += 1
                         continue
 
@@ -272,6 +326,7 @@ def main() -> None:
     parser.add_argument("--mail-to", default=os.environ.get("MAIL_TO", ""), help="收件人邮箱")
     parser.add_argument("--mail-from", default=os.environ.get("MAIL_FROM", ""), help="发件人邮箱（默认同 smtp-user）")
     parser.add_argument("--confirm-count", type=int, default=int(os.environ.get("CONFIRM_COUNT", "1")), help="连续确认阈值：同一服务器连续 N 次检测异常才推送（默认 1 = 立即推送；设 2+ 防瞬时抖动误报）")
+    parser.add_argument("--config", default=None, help="按服务器级别配置路径（默认 ~/.pteropilot/alerts.json，存在即生效）")
     args = parser.parse_args()
 
     if not args.webhook and not (args.smtp_host and args.smtp_user and args.mail_to):
@@ -292,6 +347,7 @@ def main() -> None:
             smtp_to=args.mail_to,
             smtp_from=args.mail_from,
             confirm_count=args.confirm_count,
+            config_file=Path(args.config) if args.config else None,
         )
     )
     channels = []

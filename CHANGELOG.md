@@ -9,6 +9,7 @@
 - `pteropilot-alerts` 新增告警冷却去重（`--cooldown <分钟>`，状态存 `~/.pteropilot/alerts_state.json`）：同一服务器同状态下冷却期内不重复推送，状态变化立即推送——防告警风暴（Roadmap「崩服告警」阶段三）。
 - `pteropilot-alerts` 新增**邮件渠道**（`--smtp-host/--smtp-user/--smtp-pass/--mail-to`，465 SSL / 587 STARTTLS；环境变量 `SMTP_*`/`MAIL_TO` 可配）：与 webhook 可同时使用，双通道互备（Roadmap「崩服告警」阶段四）。
 - `pteropilot-alerts` 新增**连续确认阈值**（`--confirm-count N`，环境变量 `CONFIRM_COUNT` 可配）：同一服务器连续 N 次检测到异常才推送，过滤瞬时抖动误报；恢复健康自动清零计数（Roadmap「崩服告警」阶段五）。
+- `pteropilot-alerts` 新增**按服务器级别配置**（`~/.pteropilot/alerts.json` 或 `--config`）：`default` 段 + 每服务器覆盖 `confirm_count`/`cooldown_minutes`/`min_level`，优先级 服务器 > default > 命令行参数（Roadmap「崩服告警」阶段六）。修正冷却语义：未达阈值的「确认中」观察不再推进通知时钟，冷却从上次真正推送起算。
 
 ## [0.2.3] - 2026-10-26
 

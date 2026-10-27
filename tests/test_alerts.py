@@ -272,6 +272,84 @@ async def test_cooldown_disabled_by_default(fake, env_panel, monkeypatch, tmp_pa
     assert len(notified) == 2
 
 
+# ================= 按服务器级别配置（阶段六）=================
+
+
+def test_load_alerts_config(tmp_path):
+    p = tmp_path / "alerts.json"
+    assert alerts.load_alerts_config(p) == {}
+    p.write_text('{"default": {"confirm_count": 2}, "servers": {"s1": {"cooldown_minutes": 60}}}', encoding="utf-8")
+    cfg = alerts.load_alerts_config(p)
+    assert cfg["default"]["confirm_count"] == 2
+    assert cfg["servers"]["s1"]["cooldown_minutes"] == 60
+
+
+def test_server_effective_precedence():
+    cfg = {"default": {"confirm_count": 2, "cooldown_minutes": 15}, "servers": {"s1": {"confirm_count": 3}}}
+    assert alerts.server_effective(cfg, "s1", 1, 0, "abnormal") == {
+        "confirm_count": 3, "cooldown_minutes": 15, "min_level": "abnormal",
+    }
+    # 无服务器条目 → 用 default
+    assert alerts.server_effective(cfg, "s2", 1, 0, "abnormal") == {
+        "confirm_count": 2, "cooldown_minutes": 15, "min_level": "abnormal",
+    }
+    # 无配置 → 用参数
+    assert alerts.server_effective({}, "s2", 5, 30, "error") == {
+        "confirm_count": 5, "cooldown_minutes": 30, "min_level": "error",
+    }
+
+
+async def test_per_server_confirm_count(fake, env_panel, monkeypatch, tmp_path):
+    """s1 配置 confirm_count=3，s2 用 default=2 → 各自独立计数推送。"""
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s2/resources", {"current_state": "offline"})
+    fake.route("GET", "/api/client", _servers_payload([_server("s1"), _server("s2")]))
+    cfg_file = tmp_path / "alerts.json"
+    # default：s2 连续 2 次推送 + 冷却 60min；s1 覆盖为连续 3 次
+    cfg_file.write_text(
+        '{"default": {"confirm_count": 2, "cooldown_minutes": 60}, "servers": {"s1": {"confirm_count": 3}}}',
+        encoding="utf-8",
+    )
+    state_file = tmp_path / "state.json"
+
+    r1 = await alerts.scan_and_notify("https://hook.example/send", state_file=state_file, config_file=cfg_file, include_log_signals=False)
+    assert r1["pending"] == 2  # s1=1/3, s2=1/2
+    r2 = await alerts.scan_and_notify("https://hook.example/send", state_file=state_file, config_file=cfg_file, include_log_signals=False)
+    assert r2["notified"] == 1  # s2 达 2/2 → 推送；s1 仍 2/3
+    assert r2["pending"] == 1
+    r3 = await alerts.scan_and_notify("https://hook.example/send", state_file=state_file, config_file=cfg_file, include_log_signals=False)
+    assert r3["notified"] == 1  # s1 达 3/3 → 推送；s2 冷却期 → 不重复
+    assert r3["suppressed"] == 1
+    assert len(notified) == 2
+    assert "s1" in notified[-1]
+
+
+async def test_per_server_min_level(fake, env_panel, monkeypatch, tmp_path):
+    """s1 配 min_level=error：离线（非错误态）不报；s3 error 仍报。"""
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s3/resources", {"current_state": "error"})
+    fake.route("GET", "/api/client", _servers_payload([_server("s1"), _server("s3")]))
+    cfg_file = tmp_path / "alerts.json"
+    cfg_file.write_text('{"servers": {"s1": {"min_level": "error"}}}', encoding="utf-8")
+
+    r = await alerts.scan_and_notify("https://hook.example/send", config_file=cfg_file, include_log_signals=False)
+    assert r["notified"] == 1
+    assert "s3" in notified[0]
+    assert "s1" not in notified[0]
+
+
 # ================= 邮件渠道（阶段四）=================
 
 

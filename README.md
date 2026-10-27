@@ -97,6 +97,19 @@ pteropilot-alerts \
   --mail-to ops@x.com            # --smtp-port 587 for STARTTLS (default 465 SSL)
 ```
 
+Per-server tuning (optional): drop a JSON at `~/.pteropilot/alerts.json` (or pass
+`--config <path>`). Precedence: server entry > `default` > CLI options.
+
+```json
+{
+  "default": { "confirm_count": 2, "cooldown_minutes": 15 },
+  "servers": {
+    "smp":      { "confirm_count": 3, "cooldown_minutes": 60 },
+    "creative": { "min_level": "error" }
+  }
+}
+```
+
 Only GET requests are issued; no power/command/write actions are ever triggered.
 
 ## Run from source
