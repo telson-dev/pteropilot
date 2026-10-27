@@ -57,9 +57,8 @@ PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什
 
 ### 4. 双面板兼容深化（Pterodactyl + Pelican）
 
-- **诉求**：社区正在从 Pterodactyl 往 Pelican 换代，两套面板都要吃透。
-- **做什么**：继续用 Pelican 的面板源码（路由 + 控制器）逐个核对端点与载荷形态，让同一个 MCP server 无缝驱动两种面板。
-- **要点**：把「已核对端点」写进文档，让用户知道哪些路径在两套面板上都验证过。
+- **现状（本轮推进）**：端点清单已核对并写入 [docs/compatibility.md](docs/compatibility.md)（客户端 API 共用端点 + 应用 API 密钥分离 + 实测差异）。新增 `PANEL_APP_KEY` 应用密钥配置与启动密钥前缀诊断（`ptla_`/`ptlc_`/`papp_`/`pacc_`）。
+- **下一步（待有真实面板环境）**：在运行中的 Pterodactyl / Pelican 面板上逐项实测全部端点与载荷，把「已实测」标记补进兼容文档。
 
 ### 5. 质量与测试
 
