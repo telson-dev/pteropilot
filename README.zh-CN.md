@@ -63,6 +63,63 @@ uvx pteropilot
 - 「smp 服最近一次备份是什么时候？没有就现在建一个」
 - 「往 creative 服上传这个插件并重启」
 
+## 崩服告警（webhook / 邮件）
+
+`pteropilot-alerts` 命令以只读方式扫描你的服务器，当服务器处于异常态（离线 / 错误 / 挂起）或最近控制台日志出现崩溃信号时，推一条通知到钉钉 / 企业微信机器人 webhook，或发一封邮件。适合配 cron 定时跑：
+
+```bash
+# 安装
+uv tool install pteropilot
+
+# 试跑一次
+PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
+  pteropilot-alerts --webhook "https://oapi.dingtalk.com/robot/send?access_token=***"
+
+# 每 5 分钟跑一次
+*/5 * * * * PANEL_URL=... PANEL_API_KEY=... pteropilot-alerts \
+  --webhook "https://oapi.dingtalk.com/robot/send?access_token=***" >> /var/log/pteropilot-alerts.log 2>&1
+```
+
+可选参数：`--min-level error`（只报错误态）、`--token ***`（需要 URL key 的企业微信机器人）、`--timeout <秒>`、`--no-log-signals`（只看状态、不读日志，更快）、`--cooldown <分钟>`（去重：同一服务器同一状态在冷却期内不重复通知；状态一变就立即告警——防止 cron 每几分钟跑一次时的告警风暴）、`--state-file <路径>`（冷却/确认状态持久化位置，默认 `~/.pteropilot/alerts_state.json`）、`--confirm-count <n>`（连续 N 次检测到异常才通知——过滤瞬时抖动；恢复健康归零计数）、`--config <路径>`（按服务器调灵敏度的配置文件，默认 `~/.pteropilot/alerts.json`）。
+
+邮件通道（第二通知渠道，可与 webhook 同时用）：
+
+```bash
+pteropilot-alerts \
+  --smtp-host smtp.example.com --smtp-user you@x.com --smtp-pass <授权码> \
+  --mail-to ops@x.com            # --smtp-port 587 用 STARTTLS（默认 465 SSL）
+  # --mail-from alerts@x.com     # 可选发件人（默认同 --smtp-user）
+```
+
+每个参数都有对应环境变量回退，便于把敏感信息移出命令行：
+
+| 环境变量 | 对应参数 | 默认值 |
+|---|---|---|
+| `WEBHOOK_URL` | `--webhook` | （空） |
+| `SMTP_HOST` | `--smtp-host` | （空） |
+| `SMTP_PORT` | `--smtp-port` | `465` |
+| `SMTP_USER` | `--smtp-user` | （空） |
+| `SMTP_PASS` | `--smtp-pass` | （空） |
+| `MAIL_TO` | `--mail-to` | （空） |
+| `MAIL_FROM` | `--mail-from` | （空） |
+| `CONFIRM_COUNT` | `--confirm-count` | `1` |
+
+按服务器调灵敏度（可选）：把 JSON 放到 `~/.pteropilot/alerts.json`（或传 `--config <路径>`）。优先级：服务器条目 > `default` > 命令行参数。
+
+```json
+{
+  "default": { "confirm_count": 2, "cooldown_minutes": 15 },
+  "servers": {
+    "smp":      { "confirm_count": 3, "cooldown_minutes": 60 },
+    "creative": { "min_level": "error", "email": false },
+    "auth":     { "webhook": false, "email": true, "mail_to": "oncall@x.com" },
+    "preview":  { "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=***" }
+  }
+}
+```
+
+只发 GET 请求；绝不触发电源 / 指令 / 写操作。
+
 ## 从源码运行（开发者）
 
 ```bash
@@ -78,7 +135,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.2**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.4**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 

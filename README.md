@@ -90,10 +90,12 @@ Options: `--min-level error` (only error state), `--token <key>` (WeCom bots
 that need a URL key), `--timeout <sec>`, `--no-log-signals` (state-only, faster),
 `--cooldown <minutes>` (dedupe: same server + same state is not re-notified
 within the cooldown; a state change always alerts immediately — prevents alert
-storms when cron runs every few minutes. State is persisted in
+storms when cron runs every few minutes),
+`--state-file <path>` (persist cooldown/confirm state to a custom path; default
 `~/.pteropilot/alerts_state.json`),
 `--confirm-count <n>` (require N consecutive abnormal detections before
-notifying — filters transient flaps; recovery resets the counter).
+notifying — filters transient flaps; recovery resets the counter),
+`--config <path>` (per-server tuning file; default `~/.pteropilot/alerts.json`).
 
 Email channel (second notifier, can be combined with the webhook):
 
@@ -101,7 +103,22 @@ Email channel (second notifier, can be combined with the webhook):
 pteropilot-alerts \
   --smtp-host smtp.example.com --smtp-user you@x.com --smtp-pass <auth-code> \
   --mail-to ops@x.com            # --smtp-port 587 for STARTTLS (default 465 SSL)
+  # --mail-from alerts@x.com     # optional sender (defaults to --smtp-user)
 ```
+
+Every option has an environment-variable fallback, so you can keep secrets out
+of the command line and cron entries:
+
+| Env var | Maps to | Default |
+|---|---|---|
+| `WEBHOOK_URL` | `--webhook` | *(empty)* |
+| `SMTP_HOST` | `--smtp-host` | *(empty)* |
+| `SMTP_PORT` | `--smtp-port` | `465` |
+| `SMTP_USER` | `--smtp-user` | *(empty)* |
+| `SMTP_PASS` | `--smtp-pass` | *(empty)* |
+| `MAIL_TO` | `--mail-to` | *(empty)* |
+| `MAIL_FROM` | `--mail-from` | *(empty)* |
+| `CONFIRM_COUNT` | `--confirm-count` | `1` |
 
 Per-server tuning (optional): drop a JSON at `~/.pteropilot/alerts.json` (or pass
 `--config <path>`). Precedence: server entry > `default` > CLI options.
@@ -139,7 +156,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.2** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.4** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 
