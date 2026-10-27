@@ -17,7 +17,7 @@ from mcp.server.fastmcp import FastMCP
 
 from . import __version__
 from .client import POWER_SIGNALS, PanelClient
-from .config import Config
+from .config import Config, key_role_warnings
 
 mcp = FastMCP("pteropilot")
 # mcp 1.30 的 FastMCP 不接 version 参数，握手时会 fallback 成 mcp 框架自己的
@@ -597,6 +597,8 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
+    for warn in key_role_warnings(config):
+        print(warn, file=sys.stderr)
     mcp.run()
 
 

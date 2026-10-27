@@ -51,8 +51,11 @@ Add this to your MCP client config (Claude Desktop, Cursor, etc.):
 | Variable | Description |
 |---|---|
 | `PANEL_URL` | Your panel URL |
-| `PANEL_API_KEY` | Panel API key (Panel → Account → API Credentials) |
+| `PANEL_API_KEY` | Panel **client** API key (`ptlc_` on Pterodactyl / `pacc_` on Pelican). Powers the core tools |
+| `PANEL_APP_KEY` | Optional **application** API key (`ptla_` / `papp_`). Needed for `list_nodes` / `list_all_servers` / `list_users`; without it those tools fail on Pterodactyl (403) |
 | `PANEL_READONLY` | Set to `1` for read-only mode: blocks power, write, and delete actions. Recommended while trying it out |
+
+Panel compatibility details: see [docs/compatibility.md](docs/compatibility.md).
 
 Then just talk to your AI naturally, for example:
 

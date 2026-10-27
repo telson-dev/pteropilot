@@ -13,6 +13,7 @@
 - `pteropilot-alerts` 新增**渠道按服务器独立开关与路由**：每服务器可配 `webhook`/`email` 布尔开关、`webhook_url`（指向其他机器人）、`mail_to`（发给其他收件人）（Roadmap「崩服告警」阶段七）。
 - 新增 `batch_backup_status`（只读）：遍历可访问服务器列出备份数量与最近备份时间，单台失败不阻断（Roadmap「批量」收尾）。
 - 新增 `batch_backup`（写）：批量创建备份，整体二次确认 + 只读拒绝，逐台创建、单台失败不阻断其余。
+- 双面板兼容：新增 `PANEL_APP_KEY`（应用 API 专用密钥，未设时回退 `PANEL_API_KEY`）+ 启动密钥前缀诊断（`ptla_`/`ptlc_`/`papp_`/`pacc_` 角色错配提前提示）；新增 [docs/compatibility.md](docs/compatibility.md) 记录两套面板端点点核对与实测差异（Roadmap「双面板兼容深化」）。
 
 ## [0.2.3] - 2026-10-26
 

@@ -153,20 +153,24 @@ class PanelClient:
 
     def __init__(self, config: Config, timeout: float = 30.0) -> None:
         base = config.panel_url.rstrip("/")
-        headers = {
+        client_headers = {
             "Authorization": f"Bearer {config.panel_api_key}",
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
+        # 应用 API 需要应用密钥（ptla_/papp_）；未单独配置时回退到 PANEL_API_KEY
+        app_headers = dict(client_headers)
+        app_key = config.panel_app_key or config.panel_api_key
+        app_headers["Authorization"] = f"Bearer {app_key}"
         self.timeout = timeout
         self.app = _Guarded(
             httpx.AsyncClient(
-                base_url=f"{base}/api/application", headers=headers, timeout=timeout
+                base_url=f"{base}/api/application", headers=app_headers, timeout=timeout
             )
         )
         self.client = _Guarded(
             httpx.AsyncClient(
-                base_url=f"{base}/api/client", headers=headers, timeout=timeout
+                base_url=f"{base}/api/client", headers=client_headers, timeout=timeout
             )
         )
         # daemon（wings）直连客户端：上传/下载文件打签名 URL，无 Bearer 认证。
