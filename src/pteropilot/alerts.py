@@ -44,7 +44,7 @@ from pathlib import Path
 
 import httpx
 
-from .client import PanelClient
+from .client import PanelClient, redact
 from .config import Config
 from .server import classify_state, diagnose_crash
 
@@ -300,7 +300,9 @@ async def scan_and_notify(
                 if state is not None:
                     state[ident] = {"state": state_now, "hits": hits, "ts": time.time()}
             except Exception as exc:  # noqa: BLE001 - 单台失败不阻断整体
-                errors.append(f"{ident}: {type(exc).__name__}: {exc}")
+                # redact：webhook URL 里的 access_token=?key= 签名 token 若随 httpx 异常
+                # 信息（raise_for_status 的 message 含完整 URL）一起漏出，会泄密钥。
+                errors.append(f"{ident}: {type(exc).__name__}: {redact(str(exc))}")
     finally:
         await client.aclose()
         if state is not None and path is not None:

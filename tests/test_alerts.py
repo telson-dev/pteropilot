@@ -734,3 +734,101 @@ def test_main_invalid_confirm_count(monkeypatch):
     with pytest.raises(SystemExit) as e:
         alerts.main()
     assert e.value.code == 2
+
+
+# ================= 密钥泄漏安全复审（O2）=================
+
+
+def test_redact_strips_webhook_access_token():
+    """redact() 应把 webhook URL 里的 access_token 签名去掉。"""
+    url = "https://oapi.dingtalk.com/robot/send?access_token=SECRETTOKEN123"
+    out = alerts.redact(url)
+    assert "SECRETTOKEN123" not in out
+    assert "***" in out
+
+
+def test_redact_strips_webhook_key_token():
+    """redact() 应把企业微信 style 的 ?key= / &key= 签名去掉。"""
+    url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=SECRETKEY456"
+    out = alerts.redact(url)
+    assert "SECRETKEY456" not in out
+    assert "***" in out
+
+
+def test_redact_strips_bearer_and_api_key_still():
+    """回归：redact 仍应脱敏 Bearer 与 ptla_/ptlc_/peli_ 前缀（旧能力不退化）。"""
+    for secret in ("Bearer abcDEF123._~+/=", "ptla_ABC123", "ptlc_XYZ", "peli_QQQ"):
+        assert secret.split(" ")[-1] if secret.startswith("Bearer") else secret not in alerts.redact(secret)
+
+
+async def test_webhook_push_failure_does_not_leak_signed_url(fake, env_panel, monkeypatch):
+    """webhook 推送失败时，errors 里不能带出 access_token 签名。"""
+    signed_url = "https://oapi.dingtalk.com/robot/send?access_token=LEAK_ME_TOKEN"
+
+    async def failing_webhook(url, content, token=None):
+        # 模拟 httpx.raise_for_status 的 HTTPStatusError，其 message 含完整 URL
+        raise httpx.HTTPStatusError(
+            f"Client error '400' for url '{signed_url}'",
+            request=httpx.Request("POST", signed_url),
+            response=httpx.Response(400, request=httpx.Request("POST", signed_url)),
+        )
+
+    monkeypatch.setattr(alerts, "send_webhook", failing_webhook)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    result = await alerts.scan_and_notify(signed_url)
+    assert len(result["errors"]) == 1
+    assert "LEAK_ME_TOKEN" not in result["errors"][0]
+
+
+async def test_webhook_push_failure_does_not_leak_key_token(fake, env_panel, monkeypatch):
+    """企业微信 key 签名同样不能从 errors 漏出。"""
+    signed_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=LEAK_ME_KEY"
+
+    async def failing_webhook(url, content, token=None):
+        raise httpx.HTTPStatusError(
+            "Client error",
+            request=httpx.Request("POST", signed_url),
+            response=httpx.Response(400, request=httpx.Request("POST", signed_url)),
+        )
+
+    monkeypatch.setattr(alerts, "send_webhook", failing_webhook)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    result = await alerts.scan_and_notify(signed_url)
+    assert len(result["errors"]) == 1
+    assert "LEAK_ME_KEY" not in result["errors"][0]
+
+
+async def test_smtp_auth_failure_does_not_leak_password(fake, env_panel, monkeypatch):
+    """SMTP 认证失败时，异常文本不包含 --smtp-pass 密码，errors 里也不应有。"""
+    secret_pw = "SUPER_SECRET_PW_987"
+
+    async def failing_email(to, subject, content, host, user, password, port=465, frm=None):
+        assert password == secret_pw  # 确认密码确实传进来了
+        err = alerts.smtplib.SMTPAuthenticationError(535, b"5.7.8 authentication failed")
+        raise err
+
+    monkeypatch.setattr(alerts, "send_email", failing_email)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    result = await alerts.scan_and_notify(
+        webhook="",
+        smtp_host="smtp.example.com", smtp_user="u", smtp_password=secret_pw, smtp_to="ops@x.com",
+    )
+    assert len(result["errors"]) == 1
+    assert secret_pw not in result["errors"][0]
+
+
+def test_alerts_state_file_contains_no_credentials(tmp_path):
+    """冷却状态文件只存 {state, hits, ts}，不含任何 webhook URL 或 SMTP 凭证。"""
+    p = tmp_path / "state.json"
+    alerts.save_state(p, {"s1": {"state": "offline", "hits": 1, "ts": 1.0}})
+    raw = p.read_text(encoding="utf-8")
+    assert "http" not in raw and "smtp" not in raw.lower() and "password" not in raw.lower()

@@ -23,6 +23,11 @@ POWER_SIGNALS = ("start", "stop", "restart", "kill")
 _SECRET_PATTERNS = (
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]+"),
     re.compile(r"\b(?:ptlc|ptla|peli)_[A-Za-z0-9_\-]+"),
+    # Webhook 机器人 URL 里带签名的 query 参数（钉钉 access_token / 企业微信 key）。
+    # 链接式 URL 的 token 一旦被拼进 httpx 异常信息（raise_for_status 的 message 含完整
+    # URL），就会随 errors 漏出去，故在此一并脱敏。
+    re.compile(r"(?i)access_token=[A-Za-z0-9._~%+\-/]+"),
+    re.compile(r"(?i)[?&]key=[A-Za-z0-9._~%+\-/]+"),
 )
 
 

@@ -97,3 +97,49 @@ health level, and player names — no API key, no bearer token, no signed URLs.
 (Contrast `download_file`, which returns a short-lived signed URL and is treated
 as sensitive — that tool predates this review and is unchanged.)
 
+## Security Review — alerts.py notification secrets (2026-10-28)
+
+Scope: the `pteropilot-alerts` module (`src/pteropilot/alerts.py`), which
+introduces two new secret-bearing surfaces absent from prior audits — the
+webhook URL (which may end in a signed `?access_token=***` / `?key=***` query)
+and SMTP credentials (`--smtp-pass`). Answers below.
+
+### 1. Do error messages / exception stacks leak the webhook token or SMTP password?
+
+**Webhook token — fixed.** `send_webhook` uses a bare `httpx.AsyncClient` (not
+`_Guarded`), so a push failure (e.g. `raise_for_status()` →
+`HTTPStatusError`) carries the *full signed URL* in its message. Without
+redaction this would surface the `access_token`/`key` in the scan's `errors`
+list (which `main()` then prints). `scan_and_notify` now wraps its per-server
+exception handler with `redact(str(exc))`, and `_SECRET_PATTERNS` in
+`client.py` gained two regexes — `access_token=[...]` and `[?&]key=[...]` —
+which strip these tokens to `***`.
+
+**SMTP password — no leak.** `send_email` raises
+`smtplib.SMTPAuthenticationError`/`SMTPException`, whose message is the *server's*
+response (`(535, b'...')`) — never the password. The password is passed
+positionally to `s.login(user, password)` and is not echoed. Verified by test
+`test_smtp_auth_failure_does_not_leak_password`: the failure path receives the
+real password but the resulting `errors` entry omits it.
+
+### 2. Does `alerts_state.json` (`~/.pteropilot/`) store sensitive data?
+
+No. `save_state` persists only `{state, hits, ts}` per server identifier — no
+webhook URL, no SMTP credentials, no API key. The `alerts.json` config file is
+user-authored (may contain per-server `webhook_url`), but that is explicit config
+under the operator's control, not telemetry. Verified by
+`test_alerts_state_file_contains_no_credentials`.
+
+### 3. Does CLI `--help` / logging print credentials?
+
+No. `argparse` help shows only the `help=` text, never the resolved default values
+(from `SMTP_PASS`/`SMTP_USER` etc.), and nothing logs request headers or the
+configured secrets. `main()` prints only channel names, counts, and
+already-redacted `errors`.
+
+Regression coverage added in `tests/test_alerts.py` under the heading
+「密钥泄漏安全复审（O2）」: `redact` strips `access_token`/`key` (and still
+`Bearer`/`ptla_`/`ptlc_`/`peli_`), webhook push failures with a signed URL do not
+leak the token into `errors`, and the SMTP auth-failure path does not leak the
+password.
+
