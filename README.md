@@ -17,7 +17,10 @@ No panel login, no digging through logs — just ask.
 - ⚡ Power controls: start / stop / restart / kill
 - 🖥️ Console: send commands
 - 📁 Files: browse, read, write, upload, rename, delete, create folders, one-time download links
-- 💾 Backups: list, create, restore, delete
+- 💾 Backups: list, create, restore, delete; batch overview and batch-create across servers
+- 👥 Who is online: parse join/leave lines from the console (Minecraft/Paper/Spigot/Forge/Fabric, EN & CN)
+- 🚨 Crash detection & alerts: state-level health checks + log-level crash signals (OOM/JVM/exit/fatal), optional webhook/email alerts with cooldown dedup, confirm-count anti-flap, and per-server tuning via `~/.pteropilot/alerts.json`
+- ⚡ Batch ops: one-shot status summary, batch start/stop/restart, batch backup overview/create
 - 🔒 Safety: read-only mode and explicit confirmation for dangerous actions; your API key never leaves your machine
 
 ## Install
