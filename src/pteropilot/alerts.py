@@ -21,7 +21,10 @@
 #   "default":      { "confirm_count": 2, "cooldown_minutes": 15 },
 #   "servers": {
 #     "smp":        { "confirm_count": 3, "cooldown_minutes": 60 },
-#     "creative":   { "min_level": "error" }
+#     "creative":   { "min_level": "error", "email": false },          # 只走 webhook
+#     "auth":       { "webhook": false, "email": true,                 # 只走邮件，且发给专线
+#                     "mail_to": "oncall@x.com" },
+#     "preview":    { "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=bbb" }
 #   }
 # }
 
@@ -71,23 +74,42 @@ def load_alerts_config(path: Path | None) -> dict:
         return {}
 
 
-def server_effective(cfg: dict, server_id: str, confirm_count: int, cooldown_minutes: float, min_level: str) -> dict:
-    """合并服务器配置：服务器条目 > default 段 > 命令行/函数参数。"""
+def server_effective(
+    cfg: dict,
+    server_id: str,
+    confirm_count: int,
+    cooldown_minutes: float,
+    min_level: str,
+    webhook: str = "",
+    email_enabled: bool = False,
+    smtp_to: str = "",
+) -> dict:
+    """合并服务器配置：服务器条目 > default 段 > 命令行/函数参数。
+
+    返回键：confirm_count / cooldown_minutes / min_level /
+            webhook（是否启用 webhook）/ email（是否启用邮件）/
+            webhook_url（每服务器 webhook 目标，默认全局）/ mail_to（每服务器收件人）。
+    """
     merged = {
         "confirm_count": confirm_count,
         "cooldown_minutes": cooldown_minutes,
         "min_level": min_level,
+        "webhook": bool(webhook),
+        "email": email_enabled,
+        "webhook_url": webhook,
+        "mail_to": smtp_to,
     }
     dft = cfg.get("default") or {}
-    for key in ("confirm_count", "cooldown_minutes", "min_level"):
+    srv = (cfg.get("servers") or {}).get(server_id) or {}
+    for key in ("confirm_count", "cooldown_minutes", "min_level", "webhook", "email", "webhook_url", "mail_to"):
         if key in dft:
             merged[key] = dft[key]
-    srv = (cfg.get("servers") or {}).get(server_id) or {}
-    for key in ("confirm_count", "cooldown_minutes", "min_level"):
         if key in srv:
             merged[key] = srv[key]
     merged["confirm_count"] = int(merged["confirm_count"])
     merged["cooldown_minutes"] = float(merged["cooldown_minutes"])
+    merged["webhook"] = bool(merged["webhook"])
+    merged["email"] = bool(merged["email"])
     return merged
 
 
@@ -216,10 +238,15 @@ async def scan_and_notify(
             try:
                 res = await client.resources(ident)
                 state_now = res.get("current_state", "?")
-                eff = server_effective(alerts_cfg, ident, confirm_count, cooldown_minutes, min_level)
+                eff = server_effective(
+                    alerts_cfg, ident, confirm_count, cooldown_minutes, min_level,
+                    webhook=webhook, email_enabled=email_enabled, smtp_to=smtp_to,
+                )
                 abnormal_states = {"error", "suspended"} if eff["min_level"] == "error" else {"offline", "error", "suspended"}
                 cc = eff["confirm_count"]
                 cd = eff["cooldown_minutes"]
+                wh_url = eff["webhook_url"] if eff["webhook"] else ""
+                mail_to = eff["mail_to"] if eff["email"] else ""
                 level, _hint = classify_state(state_now)
                 if level != "abnormal" or state_now not in abnormal_states:
                     # 健康：清零连续确认计数
@@ -255,11 +282,11 @@ async def scan_and_notify(
                     except Exception:
                         details.append("（日志读取失败，跳过日志级信号）")
                 message = build_alert_message(ident, state_now, details)
-                if webhook:
-                    await send_webhook(webhook, message)
-                if email_enabled:
+                if wh_url:
+                    await send_webhook(wh_url, message)
+                if mail_to:
                     await send_email(
-                        to=smtp_to,
+                        to=mail_to,
                         subject=f"PteroPilot 告警：服务器 {ident} 状态异常（{state_now}）",
                         content=message,
                         host=smtp_host,
@@ -268,7 +295,7 @@ async def scan_and_notify(
                         port=smtp_port,
                         frm=smtp_from or None,
                     )
-                if webhook or email_enabled:
+                if wh_url or mail_to:
                     notified += 1
                 if state is not None:
                     state[ident] = {"state": state_now, "hits": hits, "ts": time.time()}

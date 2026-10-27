@@ -105,10 +105,16 @@ Per-server tuning (optional): drop a JSON at `~/.pteropilot/alerts.json` (or pas
   "default": { "confirm_count": 2, "cooldown_minutes": 15 },
   "servers": {
     "smp":      { "confirm_count": 3, "cooldown_minutes": 60 },
-    "creative": { "min_level": "error" }
+    "creative": { "min_level": "error", "email": false },
+    "auth":     { "webhook": false, "email": true, "mail_to": "oncall@x.com" },
+    "preview":  { "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=bbb" }
   }
 }
 ```
+
+Per-server keys: `confirm_count`, `cooldown_minutes`, `min_level`,
+`webhook` (bool), `email` (bool), `webhook_url` (route to another bot),
+`mail_to` (route email to another recipient).
 
 Only GET requests are issued; no power/command/write actions are ever triggered.
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 
 import httpx
@@ -286,16 +287,19 @@ def test_load_alerts_config(tmp_path):
 
 def test_server_effective_precedence():
     cfg = {"default": {"confirm_count": 2, "cooldown_minutes": 15}, "servers": {"s1": {"confirm_count": 3}}}
-    assert alerts.server_effective(cfg, "s1", 1, 0, "abnormal") == {
+    assert alerts.server_effective(cfg, "s1", 1, 0, "abnormal", webhook="https://w", smtp_to="t@x.com") == {
         "confirm_count": 3, "cooldown_minutes": 15, "min_level": "abnormal",
+        "webhook": True, "email": False, "webhook_url": "https://w", "mail_to": "t@x.com",
     }
     # 无服务器条目 → 用 default
-    assert alerts.server_effective(cfg, "s2", 1, 0, "abnormal") == {
+    assert alerts.server_effective(cfg, "s2", 1, 0, "abnormal", webhook="https://w") == {
         "confirm_count": 2, "cooldown_minutes": 15, "min_level": "abnormal",
+        "webhook": True, "email": False, "webhook_url": "https://w", "mail_to": "",
     }
     # 无配置 → 用参数
-    assert alerts.server_effective({}, "s2", 5, 30, "error") == {
+    assert alerts.server_effective({}, "s2", 5, 30, "error", webhook="", email_enabled=True, smtp_to="b@x.com") == {
         "confirm_count": 5, "cooldown_minutes": 30, "min_level": "error",
+        "webhook": False, "email": True, "webhook_url": "", "mail_to": "b@x.com",
     }
 
 
@@ -348,6 +352,87 @@ async def test_per_server_min_level(fake, env_panel, monkeypatch, tmp_path):
     assert r["notified"] == 1
     assert "s3" in notified[0]
     assert "s1" not in notified[0]
+
+
+# ================= 渠道按服务器独立开关/路由（阶段七）=================
+
+
+async def test_per_server_webhook_off(fake, env_panel, monkeypatch, tmp_path):
+    """s1 配 webhook=false → 全局 webhook 存在但 s1 不推送；s2 正常推送。"""
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append((webhook, content))
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s2/resources", {"current_state": "offline"})
+    fake.route("GET", "/api/client", _servers_payload([_server("s1"), _server("s2")]))
+    cfg_file = tmp_path / "alerts.json"
+    cfg_file.write_text('{"servers": {"s1": {"webhook": false}}}', encoding="utf-8")
+
+    r = await alerts.scan_and_notify("https://hook.example/send", config_file=cfg_file, include_log_signals=False)
+    assert r["notified"] == 1
+    assert len(notified) == 1
+    assert "s2" in notified[0][1]
+    assert "s1" not in notified[0][1]
+
+
+async def test_per_server_webhook_url_override(fake, env_panel, monkeypatch, tmp_path):
+    """s1 配 webhook_url → 发往不同目标。"""
+    notified = []
+
+    async def spy(webhook, content, token=None):
+        notified.append(webhook)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+    cfg_file = tmp_path / "alerts.json"
+    cfg_file.write_text('{"servers": {"s1": {"webhook_url": "https://other.hook/send"}}}', encoding="utf-8")
+
+    await alerts.scan_and_notify("https://hook.example/send", config_file=cfg_file, include_log_signals=False)
+    assert notified == ["https://other.hook/send"]
+
+
+async def test_per_server_email_off_and_mail_to(fake, env_panel, monkeypatch, tmp_path):
+    """s1 配 email=false → 不发邮件；s2 用覆盖的收件人。"""
+    emails = []
+    webhooks = []
+
+    async def spy_email(to, subject, content, host, user, password, port=465, frm=None):
+        emails.append(to)
+
+    async def spy_webhook(webhook, content, token=None):
+        webhooks.append(webhook)
+
+    monkeypatch.setattr(alerts, "send_email", spy_email)
+    monkeypatch.setattr(alerts, "send_webhook", spy_webhook)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s2/resources", {"current_state": "offline"})
+    fake.route("GET", "/api/client", _servers_payload([_server("s1"), _server("s2")]))
+    cfg_file = tmp_path / "alerts.json"
+    cfg_file.write_text(
+        '{"servers": {"s1": {"email": false}, "s2": {"mail_to": "oncall@x.com"}}}', encoding="utf-8"
+    )
+
+    r = await alerts.scan_and_notify(
+        "https://hook.example/send",
+        smtp_host="smtp.example.com", smtp_user="u", smtp_password="p", smtp_to="ops@x.com",
+        config_file=cfg_file, include_log_signals=False,
+    )
+    assert r["notified"] == 2
+    assert emails == ["oncall@x.com"]  # 只有 s2 发邮件，且用覆盖的收件人
+    assert len(webhooks) == 2          # s1/s2 都走 webhook
+
+
+def test_server_effective_channel_keys():
+    cfg = {"default": {"email": False}, "servers": {"s1": {"mail_to": "a@x.com"}}}
+    eff = alerts.server_effective(cfg, "s1", 1, 0, "abnormal", webhook="https://w", email_enabled=True, smtp_to="b@x.com")
+    assert eff["webhook"] is True
+    assert eff["webhook_url"] == "https://w"
+    assert eff["email"] is False        # default 关掉邮件
+    assert eff["mail_to"] == "a@x.com"  # 服务器覆盖收件人
 
 
 # ================= 邮件渠道（阶段四）=================
@@ -495,3 +580,157 @@ async def test_confirm_count_healthy_resets(fake, env_panel, monkeypatch, tmp_pa
         else:  # i == 4，连续 3 次 → 推送
             assert r["notified"] == 1 and r["pending"] == 0
     assert len(notified) == 1
+
+
+# ================= 覆盖率回补（O1）：配置/状态/告警边界 =================
+
+
+def test_load_alerts_config_non_dict_json(tmp_path):
+    """配置是合法 JSON 但不是 dict（如数组）→ 返回空配置。"""
+    p = tmp_path / "alerts.json"
+    p.write_text('[1, 2, 3]', encoding="utf-8")
+    assert alerts.load_alerts_config(p) == {}
+
+
+def test_load_alerts_config_corrupt_json(tmp_path):
+    """配置是损坏 JSON → 返回空配置。"""
+    p = tmp_path / "alerts.json"
+    p.write_text('{not json', encoding="utf-8")
+    assert alerts.load_alerts_config(p) == {}
+
+
+def test_save_state_write_failure_swallowed(tmp_path):
+    """状态文件写不了（父路径是文件而非目录）→ 静默降级，不抛异常。"""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x", encoding="utf-8")
+    state_file = blocker / "sub" / "state.json"
+    # mkdir(parents=True) 遇到父路径是普通文件 → OSError 子类 → 被 save_state 吞掉
+    alerts.save_state(state_file, {"s1": {"state": "offline", "hits": 1, "ts": 1.0}})  # 不应抛异常
+
+
+async def test_diagnose_crash_for_no_signal_returns_none(monkeypatch):
+    """诊断结果里没有「崩溃信号」行 → 返回 None。"""
+    async def fake_diagnose(server_id):
+        return "健康度: offline\n（无崩溃信号）"
+
+    monkeypatch.setattr(alerts, "diagnose_crash", fake_diagnose)
+    # diagnose_crash_for 复用 server 模块，client 只需存在即可被赋给 srv.panel 再还原
+    class _C:
+        pass
+    out = await alerts.diagnose_crash_for("s1", _C(), 30.0)
+    assert out is None
+
+
+async def test_diagnose_crash_for_with_signal(monkeypatch):
+    """诊断结果里有「崩溃信号」行 → 返回该行。"""
+    async def fake_diagnose(server_id):
+        return "健康度: error\n崩溃信号: 1 类（OOM）\n详情"
+
+    monkeypatch.setattr(alerts, "diagnose_crash", fake_diagnose)
+    class _C:
+        pass
+    out = await alerts.diagnose_crash_for("s1", _C(), 30.0)
+    assert out == "崩溃信号: 1 类（OOM）"
+
+
+async def test_scan_webhook_push_failure_recorded(fake, env_panel, monkeypatch):
+    """webhook 推送失败（非 2xx）→ 记入 errors、不崩溃、其余服务器继续。"""
+    async def failing_webhook(url, content, token=None):
+        raise httpx.HTTPStatusError("push failed", request=httpx.Request("POST", url), response=httpx.Response(500, request=httpx.Request("POST", url)))
+
+    monkeypatch.setattr(alerts, "send_webhook", failing_webhook)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+
+    result = await alerts.scan_and_notify("https://hook.example/send")
+    assert result["abnormal"] == 1
+    assert result["notified"] == 0
+    assert len(result["errors"]) == 1
+    assert "s1" in result["errors"][0]
+
+
+def test_send_email_connection_failure(monkeypatch):
+    """SMTP 连接失败 → 异常向上抛（由 scan 循环接住，此处仅覆盖 send_email 出错路径）。"""
+    class _Boom:
+        def __init__(self, *a, **k):
+            raise ConnectionRefusedError("connection refused")
+    monkeypatch.setattr(alerts.smtplib, "SMTP_SSL", _Boom)
+    with pytest.raises(ConnectionRefusedError):
+        alerts.send_email(
+            to="ops@x.com", subject="s", content="c",
+            host="smtp.example.com", user="u", password="p", port=465,
+        )
+
+
+def test_send_email_auth_failure(monkeypatch):
+    """SMTP 认证失败（login 抛 SMTPAuthenticationError）→ 异常向上抛。"""
+    class _BadAuth:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+        def starttls(self):
+            pass
+        def login(self, user, password):
+            raise alerts.smtplib.SMTPAuthenticationError(535, b"auth failed")
+
+    monkeypatch.setattr(alerts.smtplib, "SMTP", lambda host, port, timeout: _BadAuth())
+    with pytest.raises(alerts.smtplib.SMTPAuthenticationError):
+        alerts.send_email(
+            to="ops@x.com", subject="s", content="c",
+            host="smtp.example.com", user="u", password="p", port=587,
+        )
+
+
+# ================= CLI main()（覆盖率回补 O1）=================
+
+
+async def _fake_scan(**kwargs):
+    return {"checked": 2, "abnormal": 1, "notified": 1, "suppressed": 0, "pending": 0, "errors": ["s1: Boom"]}
+
+
+def test_main_happy_path(monkeypatch, capsys):
+    monkeypatch.setattr(alerts, "scan_and_notify", _fake_scan)
+    monkeypatch.setattr(alerts, "DEFAULT_WEBHOOK_URL", "")
+    monkeypatch.setattr("sys.argv", ["pteropilot-alerts", "--webhook", "https://hook.example/send"])
+    alerts.main()
+    out = capsys.readouterr().out
+    assert "检查 2 台" in out
+    assert "异常 1 台" in out
+    assert "已推送 1 台" in out
+    assert "查询失败: s1: Boom" in out
+
+
+def test_main_email_channel(monkeypatch, capsys):
+    monkeypatch.setattr(alerts, "scan_and_notify", _fake_scan)
+    monkeypatch.setattr("sys.argv", [
+        "pteropilot-alerts",
+        "--smtp-host", "smtp.example.com", "--smtp-user", "u",
+        "--smtp-pass", "p", "--mail-to", "ops@x.com",
+    ])
+    alerts.main()
+    out = capsys.readouterr().out
+    assert "邮件" in out
+
+
+def test_main_no_channel_errors(monkeypatch):
+    monkeypatch.setattr(alerts, "DEFAULT_WEBHOOK_URL", "")
+    monkeypatch.setattr("sys.argv", ["pteropilot-alerts"])
+    with pytest.raises(SystemExit) as e:
+        alerts.main()
+    assert e.value.code == 2  # argparse parser.error
+
+
+def test_main_invalid_min_level(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["pteropilot-alerts", "--webhook", "https://x", "--min-level", "bogus"])
+    with pytest.raises(SystemExit) as e:
+        alerts.main()
+    assert e.value.code == 2
+
+
+def test_main_invalid_confirm_count(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["pteropilot-alerts", "--webhook", "https://x", "--confirm-count", "abc"])
+    with pytest.raises(SystemExit) as e:
+        alerts.main()
+    assert e.value.code == 2

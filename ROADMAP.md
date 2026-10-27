@@ -44,7 +44,8 @@ PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什
 - **阶段四「多渠道」已上线**：`--smtp-*`/`--mail-to` 邮件通道（465 SSL / 587 STARTTLS），与 webhook 可同时使用。
 - **阶段五「连续确认阈值」已上线**：`--confirm-count N` 连续 N 次检测异常才推送（过滤瞬时抖动），恢复健康清零。
 - **阶段六「按服务器级别配置」已上线**：`~/.pteropilot/alerts.json`（或 `--config`）按服务器覆盖 `confirm_count`/`cooldown_minutes`/`min_level`（优先级 服务器 > default > 命令行）。
-- **阶段七（计划中）**：通知渠道按服务器级别选择（webhook/邮件各自独立开关）；批量备份/文件（等真实需求驱动）。
+- **阶段七「渠道独立开关与路由」已上线**：每服务器可配 `webhook`/`email` 开关、`webhook_url`/`mail_to` 路由到不同目标。
+- **阶段八（计划中）**：批量备份/文件（等真实需求驱动）；双面板（Pelican）兼容深化。
 
 ### 3. 批量开服
 
