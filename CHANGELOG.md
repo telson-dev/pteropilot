@@ -11,6 +11,8 @@
 - `pteropilot-alerts` 新增**连续确认阈值**（`--confirm-count N`，环境变量 `CONFIRM_COUNT` 可配）：同一服务器连续 N 次检测到异常才推送，过滤瞬时抖动误报；恢复健康自动清零计数（Roadmap「崩服告警」阶段五）。
 - `pteropilot-alerts` 新增**按服务器级别配置**（`~/.pteropilot/alerts.json` 或 `--config`）：`default` 段 + 每服务器覆盖 `confirm_count`/`cooldown_minutes`/`min_level`，优先级 服务器 > default > 命令行参数（Roadmap「崩服告警」阶段六）。修正冷却语义：未达阈值的「确认中」观察不再推进通知时钟，冷却从上次真正推送起算。
 - `pteropilot-alerts` 新增**渠道按服务器独立开关与路由**：每服务器可配 `webhook`/`email` 布尔开关、`webhook_url`（指向其他机器人）、`mail_to`（发给其他收件人）（Roadmap「崩服告警」阶段七）。
+- 新增 `batch_backup_status`（只读）：遍历可访问服务器列出备份数量与最近备份时间，单台失败不阻断（Roadmap「批量」收尾）。
+- 新增 `batch_backup`（写）：批量创建备份，整体二次确认 + 只读拒绝，逐台创建、单台失败不阻断其余。
 
 ## [0.2.3] - 2026-10-26
 

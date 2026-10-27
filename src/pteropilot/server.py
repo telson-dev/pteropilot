@@ -392,6 +392,72 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
 
 
 @mcp.tool()
+async def batch_backup_status() -> str:
+    """批量备份概览（只读）：遍历我可访问的服务器，逐台列出备份数量与最近备份时间。
+
+    适合快速回答「哪些服务器没有最近备份」。单台查询失败单独标注、不阻断整体。
+    """
+    servers = await panel.client_servers()
+    if not servers:
+        return "(没有可访问的服务器)"
+    lines: list[str] = []
+    failed = 0
+    for s in servers:
+        attrs = s.get("attributes") or {}
+        sid = attrs.get("identifier") or attrs.get("id") or "?"
+        name = attrs.get("name") or sid
+        try:
+            backups = await panel.list_backups(sid)
+            count = len(backups)
+            newest = ""
+            for b in backups:
+                created = (b.get("attributes") or {}).get("created_at") or ""
+                if created and (not newest or created > newest):
+                    newest = created
+            newest_txt = newest.split("T")[0] if newest else "无"
+            lines.append(f"- {sid} | {name} | {count} 个备份 | 最近: {newest_txt}")
+        except Exception:
+            failed += 1
+            lines.append(f"- {sid} | {name} | ❌ 查询失败")
+    header = f"批量备份概览：共 {len(servers)} 台，失败 {failed} 台："
+    return header + "\n" + "\n".join(lines)
+
+
+@mcp.tool()
+async def batch_backup(server_ids: list[str], confirm: bool = False) -> str:
+    """批量创建备份（写操作，需 confirm=True）。
+
+    面板 API 无原生批量备份端点，退化为「逐台循环调用单台 create_backup + 整体二次确认」：
+    - 只读模式下整体拒绝；
+    - 未指定服务器或 confirm=False 时整体拒绝；
+    - 逐台创建，单台失败（超时/无权限/面板报错）单独标注、不阻断其余服务器。
+    """
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+    if not server_ids:
+        return "(未指定任何服务器)"
+    blocked = _need_confirm(confirm, f"批量创建备份（{len(server_ids)} 台服务器）")
+    if blocked:
+        return blocked
+
+    ok = 0
+    failed = 0
+    lines: list[str] = []
+    for sid in server_ids:
+        try:
+            backup = await panel.create_backup(sid)
+            lines.append(f"- {sid} | ✅ 备份任务已创建（{backup.get('uuid', '?')}）")
+            ok += 1
+        except Exception:
+            lines.append(f"- {sid} | ❌ 创建失败（无权限/超时/面板报错）")
+            failed += 1
+
+    header = f"批量创建备份：共 {len(server_ids)} 台，成功 {ok} 台、失败 {failed} 台："
+    return header + "\n" + "\n".join(lines)
+
+
+@mcp.tool()
 async def get_console_log(server_id: str, max_chars: int = 8000) -> str:
     """读取服务器控制台最近的日志输出（用于查看指令回馈、报错、启动引导）。"""
     log = await panel.console_log(server_id)
