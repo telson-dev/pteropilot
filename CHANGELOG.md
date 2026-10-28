@@ -2,7 +2,7 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.2.5] - 2026-10-28
 
 ### Added
 - 真实面板实测工具 `scripts/live_smoke.py`：对真实 Pterodactyl / Pelican 面板做只读端到端探测并输出报告（识别面板类型与密钥角色，仅发 GET、绝不触发写操作）；配套全栈 HTTP 集成测试 `tests/test_live_smoke.py`（uvicorn 模拟器，套件首个非 MockTransport 测试）与 [docs/live-testing.md](docs/live-testing.md) 实测指南（Roadmap「双面板兼容深化」落地）。
@@ -12,6 +12,8 @@
 
 ### Security
 - 密钥脱敏加固：新增 `client.redact()` 对 webhook 签名 query（钉钉 `access_token=`、企业微信 `[?&]key=`）的统一脱敏，防止带签名的机器人 URL 在推送失败时随 `httpx` 异常信息/`errors` 泄露；补充模块级纯函数单测（`tests/test_guarded.py`）。
+
+## [Unreleased]
 
 ## [0.2.4] - 2026-10-28
 
