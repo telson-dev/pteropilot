@@ -71,6 +71,20 @@
 | `create_backup` | `create_backup()` | POST | `/api/client/servers/{server}/backups` | 返回 `attributes`（含 `uuid`） | Pelican 源码 |
 | `restore_backup` | `restore_backup()` | POST | `/api/client/servers/{server}/backups/{backup}/restore` | 无 body | Pelican 源码 |
 | `delete_backup` | `delete_backup()` | DELETE | `/api/client/servers/{server}/backups/{backup}` | 无 body | Pelican 源码 |
+| `batch_backup` | `create_backup()`（逐台循环） | POST | `/api/client/servers/{server}/backups` × N | 无原生批量端点，客户端循环调用单台 `create_backup()`；整体 confirm 门禁在工具层 | Pelican 源码 |
+| `batch_backup_status` | `list_backups()`（逐台循环） | GET | `/api/client/servers/{server}/backups` × N | 无原生批量端点，客户端循环调用单台 `list_backups()` 汇总备份数量/最近时间 | Pelican 源码 |
+
+### 只读诊断 / 派生工具（无独立新端点，复用 resources / console）
+
+以下工具**不开新 HTTP 端点**，而是对已有端点（`resources` / `console`）的结果做解析/聚合/分类，故不单独占一行矩阵，统一在此说明：
+
+| 工具 | 复用端点 | 说明 |
+|---|---|---|
+| `list_players` | `GET .../console` | 解析控制台日志中的玩家加入/退出行（非权威，受日志 ~1000 行截断影响） |
+| `check_server_health` | `GET .../resources` | 对 `current_state` 做分类（healthy/transitional/abnormal/unknown） |
+| `diagnose_crash` | `GET .../resources` + `GET .../console` | 结合状态 + 日志扫描崩溃信号关键词 |
+| `batch_get_status` | `GET .../resources`（逐台循环） | 聚合多台的 `resources` 摘要与 `check_server_health` 健康度 |
+| `batch_backup_status` | `GET .../backups`（逐台循环） | 聚合多台的 `list_backups` 结果（见备份表同一行） |
 
 ---
 
