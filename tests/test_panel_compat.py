@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 import httpx
 import pytest
@@ -71,3 +72,36 @@ def test_config_env_reads_panel_app_key(monkeypatch):
     monkeypatch.setenv("PANEL_APP_KEY", "ptla_from_env")
     cfg = Config()
     assert cfg.panel_app_key == "ptla_from_env"
+
+
+# ================= main() 启动路径覆盖 =================
+
+
+def test_attrs_fallback_non_dict():
+    import pteropilot.server as srv
+
+    assert srv._attrs("not-a-dict") == {}
+
+
+def test_server_main_valid_config_prints_warnings(monkeypatch, capsys):
+    """有效配置下 main()：打印密钥角色提示（若有）并进入 mcp.run。"""
+    import pteropilot.server as srv
+
+    # main() 用的是模块级 config（导入时构建），直接替换为带客户端密钥的配置
+    monkeypatch.setattr(srv, "config", Config(panel_url="https://panel", panel_api_key="ptlc_k"))
+    monkeypatch.setattr(srv.mcp, "run", lambda: None)  # 不真正启动 MCP 服务
+    srv.main()
+    err = capsys.readouterr().err
+    assert "PANEL_APP_KEY" in err  # 密钥角色提示打印
+
+
+def test_alerts_main_runs_scan(monkeypatch, capsys):
+    """alerts main()：解析参数并执行扫描（无 webhook 时提示需要渠道）。"""
+    import pteropilot.alerts as alerts
+
+    monkeypatch.setattr(sys, "argv", ["pteropilot-alerts"])
+    with pytest.raises(SystemExit) as exc:
+        alerts.main()
+    assert exc.value.code == 2  # argparse parser.error 退出码
+    err = capsys.readouterr().err
+    assert "webhook" in err or "SMTP" in err
