@@ -109,3 +109,58 @@ async def test_diagnose_crash_error_does_not_leak_key(fake, make_client):
         await srv.diagnose_crash("s1")
     # 面板错误原样向上抛（由 MCP 层转错误返回），绝不把 API key 拼进消息
     assert "test" not in str(ei.value)
+
+
+# ================= 看门狗超时 / 原生崩溃 SIGSEGV 关键词扩充 =================
+
+
+def test_crash_patterns_include_watchdog_and_native_categories():
+    assert "watchdog" in _CRASH_PATTERNS
+    assert "native" in _CRASH_PATTERNS
+    wd_label, wd_kws = _CRASH_PATTERNS["watchdog"]
+    assert all(k == k.lower() for k in wd_kws)
+    # 明确不属于崩溃信号的 WARN 级措辞不应被收录（误报防护）
+    assert not any("can't keep up" in k for k in wd_kws)
+    assert not any(k == "killed" or k == "timed out" for k in wd_kws)
+
+
+async def test_diagnose_crash_watchdog_tick_timeout(fake, make_client):
+    _route_resources(fake, "s1", "offline")
+    _route_console(fake, "s1",
+                   "[Server Watchdog Thread/ERROR]: A single server tick took 60.00 seconds "
+                   "(should be max 0.05)\nThe server has not responded for 60 seconds!")
+    out = await srv.diagnose_crash("s1")
+    assert "看门狗超时（tick 卡死）" in out
+    assert "崩溃信号: " in out
+    assert "🔴" in out
+
+
+async def test_diagnose_crash_zigsegv_native(fake, make_client):
+    _route_resources(fake, "s1", "error")
+    _route_console(fake, "s1", "# A fatal error has been detected by the Java Runtime Environment\n# SIGSEGV (0xb) at pc=0x00007f")
+    out = await srv.diagnose_crash("s1")
+    assert "原生崩溃（SIGSEGV）" in out
+
+
+async def test_diagnose_crash_chinese_watchdog(fake, make_client):
+    _route_resources(fake, "s1", "offline")
+    _route_console(fake, "s1", "[看门狗] 主线程响应超时，已强制重启服务端")
+    out = await srv.diagnose_crash("s1")
+    assert "看门狗超时（tick 卡死）" in out
+
+
+async def test_diagnose_crash_cant_keep_up_is_not_crash(fake, make_client):
+    """误报防护：Can't keep up! 是负载警告而非崩溃，不应命中崩溃信号。"""
+    _route_resources(fake, "s1", "running")
+    _route_console(fake, "s1", "[Server thread/WARN]: Can't keep up! Is the server overloaded? "
+                              "Running 2050ms or 41 ticks behind")
+    out = await srv.diagnose_crash("s1")
+    assert "崩溃信号: 未发现" in out
+
+
+async def test_diagnose_crash_connection_reset_is_not_crash(fake, make_client):
+    """误报防护：Connection reset by peer 是网络错误，不应命中崩溃信号。"""
+    _route_resources(fake, "s1", "running")
+    _route_console(fake, "s1", "Connection reset by peer")
+    out = await srv.diagnose_crash("s1")
+    assert "崩溃信号: 未发现" in out

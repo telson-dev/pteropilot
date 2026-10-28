@@ -217,6 +217,19 @@ _CRASH_PATTERNS: dict[str, tuple[str, tuple[str, ...]]] = {
         "致命错误",
         ("a fatal error", "crash report", "crash-reports", "fatal: unable"),
     ),
+    # Paper/Spigot 看门狗：主线程 tick 卡死超时、看门狗强杀，是明确的运行中崩溃信号
+    # （比「内存不足」更早出现，常伴随 freeze 后 watchdog 重启）。只收录明确的
+    # watchdog 措辞，不收录「Can't keep up!」这类 WARN 级负载告警（会误报健康日志）。
+    "watchdog": (
+        "看门狗超时（tick 卡死）",
+        ("server watchdog thread", "a single server tick took", "thread watchdog",
+         "has not responded for", "看门狗"),
+    ),
+    # JVM 原生崩溃：SIGSEGV/segfault 是 hs_err_pid 之外出现在 stderr/控制台的裸崩溃标记。
+    "native": (
+        "原生崩溃（SIGSEGV）",
+        ("sigsegv", "segmentation fault", "segfault"),
+    ),
 }
 
 
@@ -225,7 +238,7 @@ async def diagnose_crash(server_id: str, tail: int = 60) -> str:
     """诊断服务器是否崩溃/异常（Roadmap「崩服告警」检测点，只读）。
 
     结合当前状态与最近控制台日志：扫描日志中的崩溃信号（内存不足 / JVM 崩溃 /
-    进程异常退出 / 致命错误），输出检测结果、命中行数与建议动作。
+    看门狗超时 / 原生崩溃 SIGSEGV / 进程异常退出 / 致命错误），输出检测结果、命中行数与建议动作。
     供 AI 判断是否需要提醒用户或执行恢复（如 power_signal start）。
     只读、不发外部告警；tail 控制扫描的日志行数。
     """

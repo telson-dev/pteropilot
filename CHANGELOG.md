@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `diagnose_crash` 崩溃关键词表扩充：新增「看门狗超时（tick 卡死）」（Paper/Spigot watchdog、中文「看门狗」）与「原生崩溃（SIGSEGV/segfault）」两类信号。明确排除 `Can't keep up!`（WARN 负载警告）与 `Connection reset by peer`（网络错误）等易误报项，保持「宁漏报不误报」原则。
+
 ### Security
 - 密钥脱敏加固：新增 `client.redact()` 对 webhook 签名 query（钉钉 `access_token=`、企业微信 `[?&]key=`）的统一脱敏，防止带签名的机器人 URL 在推送失败时随 `httpx` 异常信息/`errors` 泄露；补充模块级纯函数单测（`tests/test_guarded.py`）。
 
