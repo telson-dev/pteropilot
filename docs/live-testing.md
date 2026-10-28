@@ -36,7 +36,9 @@ python scripts/live_smoke.py
 
 ## 3. 把结果归档
 
-- 全部通过：在 `docs/compatibility.md` 顶部加一行「已实测：<日期>，Pterodactyl/Pelican vX（报告见 commit 注释或随附）」，并把面板类型/版本写进「参考」区。
+- 全部通过：在 `docs/compatibility.md` 顶部的「已实测记录」表里补一行（日期 / 面板 / 版本 / 通过数），
+  并把面板类型/版本写进同一行；失败端点按下面的映射补进该表「失败端点」列与文末「已知差异」。
+  端点命名对照见 compatibility.md 的「live_smoke 输出 ↔ 本表端点 映射」小节。
 - 有失败：按错误信息排查，常见原因：
   - **403**：密钥角色不对（客户端工具用 `ptlc_`/`pacc_`；应用工具用 `ptla_`/`papp_`，见 `PANEL_APP_KEY`）。
   - **404**：面板版本过旧/过新，端点路径变了——把 404 端点记录进 compatibility.md 的差异表。
