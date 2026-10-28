@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 真实面板实测工具 `scripts/live_smoke.py`：对真实 Pterodactyl / Pelican 面板做只读端到端探测并输出报告（识别面板类型与密钥角色，仅发 GET、绝不触发写操作）；配套全栈 HTTP 集成测试 `tests/test_live_smoke.py`（uvicorn 模拟器，套件首个非 MockTransport 测试）与 [docs/live-testing.md](docs/live-testing.md) 实测指南（Roadmap「双面板兼容深化」落地）。
+
 ### Changed
 - `diagnose_crash` 崩溃关键词表扩充：新增「看门狗超时（tick 卡死）」（Paper/Spigot watchdog、中文「看门狗」）与「原生崩溃（SIGSEGV/segfault）」两类信号。明确排除 `Can't keep up!`（WARN 负载警告）与 `Connection reset by peer`（网络错误）等易误报项，保持「宁漏报不误报」原则。
 
