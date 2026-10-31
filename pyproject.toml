@@ -50,6 +50,8 @@ dev = [
   "pytest>=8",
   "pytest-asyncio>=0.24",
   "pytest-cov>=7.1.0",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
 ]
 
 [tool.pytest.ini_options]
