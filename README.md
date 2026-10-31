@@ -1,5 +1,6 @@
 # PteroPilot
 
+[![CI](https://github.com/telson-dev/pteropilot/actions/workflows/ci.yml/badge.svg)](https://github.com/telson-dev/pteropilot/actions/workflows/ci.yml)
 **English** | [中文](README.zh-CN.md)
 
 ![PteroPilot](assets/pteropilot-icon.png)
