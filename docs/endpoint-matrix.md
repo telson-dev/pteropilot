@@ -81,6 +81,8 @@
 | 工具 | 复用端点 | 说明 |
 |---|---|---|
 | `list_players` | `GET .../console` | 解析控制台日志中的玩家加入/退出行（非权威，受日志 ~1000 行截断影响） |
+| `player_history_stats` | `GET .../console` | 解析控制台日志统计玩家在线历史（当前在线推断、上线次数 Top、最近加入/离开；同样受日志 ~1000 行截断影响） |
+| `read_server_logs` | `GET .../files/contents` | 读取游戏服务器日志文件末尾若干行（默认 `logs/latest.log`），复用文件读取端点（见文件表 `read_file` 行） |
 | `check_server_health` | `GET .../resources` | 对 `current_state` 做分类（healthy/transitional/abnormal/unknown） |
 | `diagnose_crash` | `GET .../resources` + `GET .../console` | 结合状态 + 日志扫描崩溃信号关键词 |
 | `batch_get_status` | `GET .../resources`（逐台循环） | 聚合多台的 `resources` 摘要与 `check_server_health` 健康度 |
