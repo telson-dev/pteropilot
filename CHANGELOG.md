@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+- `broadcast_message` 批量广播工具：向多台 / 全部服务器控制台广播同一条 `say <message>`（Minecraft 聊天公告，如停机维护公告）；`server_ids` 传 `["*"]` 表示全部可访问服务器，只读拒绝 + confirm 拦截（高危写操作）+ 单台失败不阻断其余，逐台回馈成功/失败清单。
+- `read_server_logs` 日志排查工具：读取游戏服务器日志末尾若干行（默认 `logs/latest.log` 最后 200 行，上限 5000 行），内容过长自动只保留末尾 20000 字符（最新日志），配合 `diagnose_crash` 排查崩溃与报错。
+
 ## [0.2.5] - 2026-10-28
 
 ### Added

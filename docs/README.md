@@ -144,6 +144,7 @@
 | `batch_get_status` | 只读 | 批量拉取我可访问服务器的状态与健康度摘要（单台失败不阻断整体） | — |
 | `list_files` | 只读 | 列出目录内容 | — |
 | `read_file` | 只读 | 读取文本文件 | — |
+| `read_server_logs` | 只读 | 读取游戏服务器日志末尾若干行（默认 logs/latest.log 最后 200 行），用于排查崩溃与报错 | — |
 | `download_file` | 只读 | 获取一次性下载链接（约 15 分钟） | — |
 | `list_backups` | 只读 | 列出备份 | — |
 | `batch_backup_status` | 只读 | 批量遍历我可访问服务器，逐台列出备份数量与最近备份时间（单台失败不阻断整体） | — |
@@ -152,6 +153,7 @@
 | `batch_power` | 写入 | 批量对一组服务器发电源信号（逐台循环、单台失败不阻断整体） | stop/restart/kill ✅ |
 | `batch_backup` | 写入 | 批量创建备份（逐台循环、单台失败不阻断其余） | ✅ |
 | `send_command` | 写入 | 发控制台指令 | — |
+| `broadcast_message` | 写入 | 批量向多台 / 全部服务器控制台广播 `say <message>`（`["*"]` 表示全部；单台失败不阻断） | ? |
 | `write_file` | 写入 | 写入文本文件（覆盖需确认） | 覆盖 ✅ |
 | `delete_files` | 写入 | 删除文件/目录 | ✅ |
 | `create_folder` | 写入 | 新建文件夹 | — |

@@ -319,6 +319,34 @@ async def read_file(server_id: str, path: str, max_chars: int = 20000) -> str:
 
 
 @mcp.tool()
+async def read_server_logs(server_id: str, path: str = "logs/latest.log", lines: int = 200) -> str:
+    """读取游戏服务器日志的末尾若干行（默认 logs/latest.log 最后 200 行）。
+
+    用于排查崩溃/报错：AI 可据此分析最近一次崩溃原因（如 OutOfMemoryError、
+    缺依赖、端口占用等）。lines 上限 5000；内容过长时只保留末尾 20000 字符
+    （即最新日志），不影响定位最近的报错。
+    """
+    lines = max(1, min(int(lines), 5000))
+    content = await panel.read_file(server_id, path)
+    all_lines = content.splitlines()
+    tail = all_lines[-lines:]
+    text = "\n".join(tail)
+    max_chars = 20000
+    truncated = False
+    if len(text) > max_chars:
+        text = text[-max_chars:]
+        truncated = True
+    if not tail:
+        return f"(文件 {path} 为空)"
+    head = f"📄 {path} · 共 {len(all_lines)} 行"
+    if len(tail) < len(all_lines):
+        head += f"，显示末尾 {len(tail)} 行"
+    if truncated:
+        head += "（内容过长，仅保留末尾 20000 字符）"
+    return head + "\n" + text
+
+
+@mcp.tool()
 async def download_file(server_id: str, path: str) -> str:
     """获取服务器上某文件的一次性下载链接（约 15 分钟有效）。"""
     url = await panel.download_url(server_id, path)
