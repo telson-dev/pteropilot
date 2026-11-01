@@ -2,7 +2,7 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.2.6] - 2026-11-02
 
 ### Added
 - `broadcast_message` 批量广播工具：向多台 / 全部服务器控制台广播同一条 `say <message>`（Minecraft 聊天公告，如停机维护公告）；`server_ids` 传 `["*"]` 表示全部可访问服务器，只读拒绝 + confirm 拦截（高危写操作）+ 单台失败不阻断其余，逐台回馈成功/失败清单。
