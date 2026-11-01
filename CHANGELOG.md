@@ -8,6 +8,7 @@
 - `broadcast_message` 批量广播工具：向多台 / 全部服务器控制台广播同一条 `say <message>`（Minecraft 聊天公告，如停机维护公告）；`server_ids` 传 `["*"]` 表示全部可访问服务器，只读拒绝 + confirm 拦截（高危写操作）+ 单台失败不阻断其余，逐台回馈成功/失败清单。
 - `read_server_logs` 日志排查工具：读取游戏服务器日志末尾若干行（默认 `logs/latest.log` 最后 200 行，上限 5000 行），内容过长自动只保留末尾 20000 字符（最新日志），配合 `diagnose_crash` 排查崩溃与报错。
 - `player_history_stats` 玩家在线历史统计工具：解析控制台日志（join / left / lost connection），输出当前在线（推断）、上线次数 Top、最近加入/离开活动，用于了解服务器活跃度（非权威，基于最近日志行推断）。
+- `schedule_restart` 计划重启工具：先向控制台广播公告（say "服务器将在 N 分钟后自动重启..."，可自定义），N 分钟后自动执行 restart；minutes 钳制 1-120，高危写操作需 confirm=True；计划随 MCP 进程存活（进程退出则取消，无持久化）。
 
 ## [0.2.5] - 2026-10-28
 

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import sys
 from typing import Any
@@ -634,6 +635,58 @@ async def broadcast_message(server_ids: list[str], message: str, confirm: bool =
     if fail:
         lines.append(f"❌ 失败 {len(fail)} 台：{'；'.join(fail)}")
     return "\n".join(lines)
+
+
+def _spawn_after(delay: float, coro_factory: Any) -> None:
+    """在当前事件循环上安排后台任务：delay 秒后执行 coro_factory()。"""
+
+    async def _runner() -> None:
+        await asyncio.sleep(delay)
+        await coro_factory()
+
+    asyncio.get_running_loop().create_task(_runner())
+
+
+@mcp.tool()
+async def schedule_restart(
+    server_id: str, minutes: int = 5, message: str | None = None, confirm: bool = False
+) -> str:
+    """安排服务器在 N 分钟后自动重启（先广播公告，到点自动 restart）。
+
+    - 立即向服务器控制台广播公告（say "服务器将在 N 分钟后自动重启..."，
+      可自定义 message）；
+    - N 分钟后自动执行 restart（与手动 power restart 一致）；
+    - 高危写操作，必须 ``confirm=True``；minutes 范围 1-120，自动钳制；
+    - ⚠️ 计划随本 MCP 进程存活：进程退出/被终止则计划取消（无持久化），
+      适合"提前 5 分钟提醒 + 定时重启"这类运维场景。
+    """
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+    minutes = max(1, min(int(minutes), 120))
+    blocked = _need_confirm(confirm, f"安排 {server_id} 在 {minutes} 分钟后重启")
+    if blocked:
+        return blocked
+
+    text = (message or f"服务器将在 {minutes} 分钟后自动重启，请及时保存并退出。").strip()
+    if not text:
+        return "公告消息不能为空。"
+    try:
+        await panel.send_command(server_id, f"say {text}")
+    except Exception as e:
+        return f"❌ 公告发送失败（计划已取消）：{e}"
+
+    async def _do_restart() -> None:
+        try:
+            await panel.power(server_id, "restart")
+        except Exception:
+            pass  # 到点重启失败：静默（AI 可稍后用 power_signal 检查）
+
+    _spawn_after(minutes * 60, _do_restart)
+    return (
+        f"✅ 已安排 {server_id} 在 {minutes} 分钟后自动重启，公告已广播。"
+        f"⚠️ 计划随本进程存活，进程退出则取消。"
+    )
 
 
 @mcp.tool()

@@ -155,6 +155,7 @@
 | `batch_backup` | 写入 | 批量创建备份（逐台循环、单台失败不阻断其余） | ✅ |
 | `send_command` | 写入 | 发控制台指令 | — |
 | `broadcast_message` | 写入 | 批量向多台 / 全部服务器控制台广播 `say <message>`（`["*"]` 表示全部；单台失败不阻断） | ? |
+| `schedule_restart` | 写入 | 安排服务器 N 分钟后自动重启（先广播公告，到点自动 restart；计划随进程存活） | ✅ |
 | `write_file` | 写入 | 写入文本文件（覆盖需确认） | 覆盖 ✅ |
 | `delete_files` | 写入 | 删除文件/目录 | ✅ |
 | `create_folder` | 写入 | 新建文件夹 | — |
