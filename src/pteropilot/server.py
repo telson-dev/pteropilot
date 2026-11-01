@@ -346,6 +346,83 @@ async def read_server_logs(server_id: str, path: str = "logs/latest.log", lines:
     return head + "\n" + text
 
 
+# 玩家在线历史解析：基于 Minecraft 控制台日志行（join/leave/lost connection）。
+_JOIN_MARK = " joined the game"
+_LEAVE_MARKS = (" left the game", " lost connection")
+
+
+def _parse_player_events(content: str, max_lines: int) -> list[tuple[str, str, str]]:
+    """从日志内容解析玩家上线/下线事件，返回 [(时间, 玩家, "joined"|"left"), ...]（按时间序）。"""
+    import re
+
+    events: list[tuple[str, str, str]] = []
+    lines = content.splitlines()[-max_lines:]
+    for line in lines:
+        stamp = ""
+        if line.startswith("[") and "] " in line:
+            stamp = line[1 : line.index("] ")]
+        msg = line.split("]: ", 1)[-1] if "]: " in line else line
+        kind = None
+        name = ""
+        if _JOIN_MARK in msg:
+            kind = "joined"
+            name = msg.split(_JOIN_MARK, 1)[0]
+        else:
+            for mark in _LEAVE_MARKS:
+                if mark in msg:
+                    kind = "left"
+                    name = msg.split(mark, 1)[0]
+                    break
+        if kind is None:
+            continue
+        # 清理名字：去掉 /IP:port 后缀与首尾空白
+        name = re.sub(r"\[/.*?\]\s*$", "", name).strip()
+        if name:
+            events.append((stamp, name, kind))
+    return events
+
+
+@mcp.tool()
+async def player_history_stats(
+    server_id: str, log_path: str = "logs/latest.log", lines: int = 5000
+) -> str:
+    """基于服务器控制台日志统计玩家在线历史：当前在线、上线次数、最近活动。
+
+    用于了解服务器活跃度/谁常来。注意：基于最近日志行推断（非权威）——
+    早于日志窗口的退出可能被截断，导致"当前在线"高估。
+    """
+    lines = max(100, min(int(lines), 20000))
+    content = await panel.read_file(server_id, log_path)
+    events = _parse_player_events(content, lines)
+    if not events:
+        return f"(最近 {lines} 行日志中没有发现加入/离开记录——服务器可能没人玩，或日志路径不对：{log_path})"
+
+    # 当前在线：join - left 净值 > 0
+    balance: dict[str, int] = {}
+    joins: dict[str, int] = {}
+    for _stamp, name, kind in events:
+        balance[name] = balance.get(name, 0) + (1 if kind == "joined" else -1)
+        if kind == "joined":
+            joins[name] = joins.get(name, 0) + 1
+    online = [n for n, b in balance.items() if b > 0]
+    online.sort(key=lambda n: (-balance[n], n))
+
+    lines_out = [f"📄 {log_path} · 分析最近 {len(events)} 条加入/离开事件"]
+    if online:
+        lines_out.append(
+            "当前在线（推断）: " + "、".join(f"{n}（净+{balance[n]}）" for n in online)
+        )
+    else:
+        lines_out.append("当前在线（推断）: 无人")
+    top = sorted(joins.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+    lines_out.append("上线次数 Top: " + "、".join(f"{n} ×{c}" for n, c in top))
+    lines_out.append("最近活动:")
+    for stamp, name, kind in events[-5:]:
+        lines_out.append(f"  {stamp or '??:??:??'} {name} {'加入' if kind == 'joined' else '离开'}")
+    lines_out.append("（基于日志推断，非权威；仅供参考活跃度）")
+    return "\n".join(lines_out)
+
+
 @mcp.tool()
 async def download_file(server_id: str, path: str) -> str:
     """获取服务器上某文件的一次性下载链接（约 15 分钟有效）。"""
