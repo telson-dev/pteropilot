@@ -2,6 +2,11 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+- 性能优化：批量工具并发化——`broadcast_message` / `batch_power` / `batch_backup` 由逐台串行改为 `asyncio.gather` 并发执行（结果保序、单台失败仍不阻断其余），多台场景耗时从 N× 单台延迟降至 ≈1×。
+
 ## [0.2.6] - 2026-11-02
 
 ### Added

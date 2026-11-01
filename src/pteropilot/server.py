@@ -496,14 +496,21 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
     ok = 0
     failed = 0
     lines: list[str] = []
-    for sid in server_ids:
+
+    async def _apply(sid: str) -> str:
         try:
             await panel.power(sid, signal)
-            lines.append(f"- {sid} | ✅ 已发送 {signal}")
-            ok += 1
+            return f"- {sid} | ✅ 已发送 {signal}"
         except Exception:
             # 单台失败不阻断整体，标注后继续。
-            lines.append(f"- {sid} | ❌ 失败（无权限/超时/面板报错）")
+            return f"- {sid} | ❌ 失败（无权限/超时/面板报错）"
+
+    # 并发执行（gather 保序）：面板无批量端点，但并发调用显著缩短整批耗时。
+    for line in await asyncio.gather(*(_apply(sid) for sid in server_ids)):
+        lines.append(line)
+        if "✅" in line:
+            ok += 1
+        else:
             failed += 1
 
     header = f"批量 {signal}：共 {len(server_ids)} 台，成功 {ok} 台、失败 {failed} 台："
@@ -563,13 +570,20 @@ async def batch_backup(server_ids: list[str], confirm: bool = False) -> str:
     ok = 0
     failed = 0
     lines: list[str] = []
-    for sid in server_ids:
+
+    async def _create(sid: str) -> str:
         try:
             backup = await panel.create_backup(sid)
-            lines.append(f"- {sid} | ✅ 备份任务已创建（{backup.get('uuid', '?')}）")
-            ok += 1
+            return f"- {sid} | ✅ 备份任务已创建（{backup.get('uuid', '?')}）"
         except Exception:
-            lines.append(f"- {sid} | ❌ 创建失败（无权限/超时/面板报错）")
+            return f"- {sid} | ❌ 创建失败（无权限/超时/面板报错）"
+
+    # 并发执行（gather 保序）：面板无批量备份端点，并发调用缩短整批耗时。
+    for line in await asyncio.gather(*(_create(sid) for sid in server_ids)):
+        lines.append(line)
+        if "✅" in line:
+            ok += 1
+        else:
             failed += 1
 
     header = f"批量创建备份：共 {len(server_ids)} 台，成功 {ok} 台、失败 {failed} 台："
@@ -625,12 +639,22 @@ async def broadcast_message(server_ids: list[str], message: str, confirm: bool =
     if not targets:
         return "(指定的服务器都不存在或无权限)"
     ok, fail = [], []
-    for sid, name in targets:
+
+    async def _bcast(sid: str, name: str) -> tuple[str | None, str | None]:
         try:
             await panel.send_command(sid, f"say {msg}")
-            ok.append(name)
+            return name, None
         except Exception as e:  # 单台失败不阻断
-            fail.append(f"{name}: {e}")
+            return None, f"{name}: {e}"
+
+    # 并发广播（gather 保序）：多台服务器同时发公告，显著缩短整批耗时。
+    for done_name, done_fail in await asyncio.gather(
+        *(_bcast(sid, name) for sid, name in targets)
+    ):
+        if done_fail is None:
+            ok.append(done_name)
+        else:
+            fail.append(done_fail)
     lines = [f"✅ 已广播到 {len(ok)} 台：{'、'.join(ok)}"]
     if fail:
         lines.append(f"❌ 失败 {len(fail)} 台：{'；'.join(fail)}")
