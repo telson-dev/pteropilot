@@ -490,6 +490,48 @@ async def send_command(server_id: str, command: str) -> str:
 
 
 @mcp.tool()
+async def broadcast_message(server_ids: list[str], message: str, confirm: bool = False) -> str:
+    """【批量】向多台服务器控制台广播同一条消息（如停机维护公告）。
+
+    实际发送 ``say <message>``（Minecraft 聊天广播）。``server_ids`` 传
+    ``["*"]`` 表示全部可访问服务器。会同时写入多台服务器控制台，属于高危
+    操作，必须 ``confirm=True`` 才会执行；逐台失败不阻断其余服务器。
+    """
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+    if not confirm:
+        return "⚠️ 广播会同时写入多台服务器控制台，属于高危操作，已拦截。确认无误后请带 confirm=True 重新调用。"
+    msg = message.strip()
+    if not msg:
+        return "消息不能为空。"
+    servers = await panel.client_servers()
+    if not servers:
+        return "(没有可访问的服务器)"
+    targets: list[tuple[str, str]] = []
+    for s in servers:
+        a = _attrs(s)
+        sid = a.get("identifier") or a.get("id")
+        if not sid:
+            continue
+        if server_ids == ["*"] or sid in server_ids:
+            targets.append((sid, _name(a)))
+    if not targets:
+        return "(指定的服务器都不存在或无权限)"
+    ok, fail = [], []
+    for sid, name in targets:
+        try:
+            await panel.send_command(sid, f"say {msg}")
+            ok.append(name)
+        except Exception as e:  # 单台失败不阻断
+            fail.append(f"{name}: {e}")
+    lines = [f"✅ 已广播到 {len(ok)} 台：{'、'.join(ok)}"]
+    if fail:
+        lines.append(f"❌ 失败 {len(fail)} 台：{'；'.join(fail)}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
 async def write_file(server_id: str, path: str, content: str, confirm: bool = False) -> str:
     """写入文本文件；若文件已存在将被覆盖（需 confirm=True）。"""
     denied = _denied_if_readonly()

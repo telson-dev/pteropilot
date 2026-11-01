@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import socket
 import sys
 import threading
 import time
@@ -22,8 +23,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # 仓库根，导�
 from pteropilot.config import Config
 from scripts import live_smoke
 
-PORT = 18089
-BASE = f"http://127.0.0.1:{PORT}"
+
+def _free_port() -> int:
+    """找一个当前空闲的本地端口，避免 CI/并行测试里硬编码端口被占用。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def build_panel_app() -> FastAPI:
@@ -72,28 +77,31 @@ def build_panel_app() -> FastAPI:
 
 
 @pytest.fixture(scope="module")
-def panel_server():
+def base_url():
+    """起一个本地 uvicorn 面板模拟器，返回其实际绑定的 base URL。"""
+    port = _free_port()
     app = build_panel_app()
-    config = uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning")
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
+    base = f"http://127.0.0.1:{port}"
     # 等服务起来
     deadline = time.time() + 15
     while time.time() < deadline:
         try:
-            r = httpx.get(f"{BASE}/api/client", timeout=2)
+            r = httpx.get(f"{base}/api/client", timeout=2)
             if r.status_code == 200:
                 break
         except Exception:
             time.sleep(0.2)
-    yield server
+    yield base
     server.should_exit = True
     thread.join(timeout=5)
 
 
-def test_live_smoke_all_endpoints_pass(panel_server):
-    cfg = Config(panel_url=BASE, panel_api_key="ptlc_k", panel_app_key="ptla_a")
+def test_live_smoke_all_endpoints_pass(base_url):
+    cfg = Config(panel_url=base_url, panel_api_key="ptlc_k", panel_app_key="ptla_a")
     report = asyncio.run(live_smoke.run(cfg))
     assert "Pterodactyl" in report["panel_hint"]
     results = report["results"]
@@ -109,10 +117,10 @@ def test_live_smoke_all_endpoints_pass(panel_server):
 
 
 def test_live_smoke_pelican_hint():
-    cfg = Config(panel_url=BASE, panel_api_key="pacc_k", panel_app_key="papp_a")
+    cfg = Config(panel_url="http://127.0.0.1:0", panel_api_key="pacc_k", panel_app_key="papp_a")
     assert "Pelican" in live_smoke.panel_type_hint(cfg)
 
 
 def test_live_smoke_app_key_as_client_warns():
-    cfg = Config(panel_url=BASE, panel_api_key="ptla_a")
+    cfg = Config(panel_url="http://127.0.0.1:0", panel_api_key="ptla_a")
     assert "403" in live_smoke.panel_type_hint(cfg)
