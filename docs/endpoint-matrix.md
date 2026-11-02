@@ -49,6 +49,7 @@
 | `batch_power` | `power()`（逐台循环） | POST | `/api/client/servers/{server}/power` × N | 无原生批量端点，客户端循环调用单台 `power()`；整体 confirm 门禁在工具层 | Pelican 源码 |
 | `get_console_log` | `console_log()` | GET | `/api/client/servers/{server}/console` | 返回**纯文本**（非 JSON） | Pelican 源码 |
 | `send_command` | `send_command()` | POST | `/api/client/servers/{server}/command` | body `{"command": "..."}` | Pelican 源码 |
+| `get_server_startup` | `get_startup()` | GET | `/api/client/servers/{server}/startup` | 返回 `{ attributes: { startup, docker_image, ... } }`（egg 启动命令与变量） | Pelican 源码 |
 
 ### 用户侧（Client API）—— 文件管理
 
@@ -68,6 +69,7 @@
 | 工具 | client 方法 | HTTP | 路由 | 载荷形态 | 核对来源 |
 |---|---|---|---|---|---|
 | `list_backups` | `list_backups()` | GET | `/api/client/servers/{server}/backups` | `data[]`，`attributes` 含 `uuid`/`name`/`bytes`/`completed_at`/`is_locked` | Pelican 源码 |
+| `get_backup_download` | `backup_download_url()` | GET | `/api/client/servers/{server}/backups/{backup}/download` | 返回 `attributes.url`（一次性下载链接，配合 `list_backups` 的 UUID） | Pelican 源码 |
 | `create_backup` | `create_backup()` | POST | `/api/client/servers/{server}/backups` | 返回 `attributes`（含 `uuid`） | Pelican 源码 |
 | `restore_backup` | `restore_backup()` | POST | `/api/client/servers/{server}/backups/{backup}/restore` | 无 body | Pelican 源码 |
 | `delete_backup` | `delete_backup()` | DELETE | `/api/client/servers/{server}/backups/{backup}` | 无 body | Pelican 源码 |

@@ -16,7 +16,8 @@ PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什
 - **批量广播**：`broadcast_message`（整体确认后向多台 / 全部服务器控制台广播 `say <message>`，单台失败不阻断）
 - 实时控制台：读日志、发指令
 - 文件管理：列表 / 读取 / 写入 / 上传 / 重命名 / 删除 / 新建文件夹 / 一次性下载链接
-- 备份：创建 / 列表 / 恢复 / 删除
+- 备份：创建 / 列表 / 恢复 / 删除 / 一次性下载链接（`get_backup_download`，配合备份 UUID）
+- **服务器启动配置**：`get_server_startup`（查看启动命令与 egg 启动变量，排查启动失败）
 - **查玩家在线**：`list_players`（当前在线，日志解析）+ `player_history_stats`（在线历史：上线次数 Top / 最近活动，兼容原版 / Paper / Spigot / Forge / Fabric 中英文格式）
 - **健康度与崩服检测**：`check_server_health`（状态级）+ `diagnose_crash`（日志级崩溃信号：内存不足 / JVM 崩溃 / 进程异常退出 / 致命错误，识别反复崩溃循环）+ `read_server_logs`（直接读游戏日志末尾若干行，配合排查）
 - 安全基线：只读模式开关、危险操作确认、API key 不落第三方

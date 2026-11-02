@@ -637,6 +637,29 @@ async def get_console_log(server_id: str, max_chars: int = 8000) -> str:
 
 
 @mcp.tool()
+async def batch_get_console_log(server_ids: list[str], max_chars: int = 3000) -> str:
+    """批量读取多台服务器的控制台最近日志（只读，并发执行）。
+
+    适合「多台服务器同时出问题」的场景：一次拿多台的控制台输出对比。
+    单台读取失败单独标注、不阻断其余；每台输出按 server_ids 顺序排列。
+    """
+    if not server_ids:
+        return "(未指定任何服务器)"
+
+    async def _one(sid: str) -> str:
+        try:
+            log = await panel.console_log(sid)
+            if len(log) > max_chars:
+                log = log[-max_chars:] + f"\n...[已截断，仅显示末尾 {max_chars} 字符]"
+            return f"### {sid}\n{log}"
+        except Exception as e:
+            return f"### {sid}\n❌ 读取失败: {e}"
+
+    results = await asyncio.gather(*(_one(sid) for sid in server_ids))
+    return "\n\n".join(results)
+
+
+@mcp.tool()
 async def send_command(server_id: str, command: str) -> str:
     """向服务器控制台发送一条指令。"""
     denied = _denied_if_readonly()
