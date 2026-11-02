@@ -327,6 +327,29 @@ async def list_players(server_id: str) -> str:
 
 
 @mcp.tool()
+async def batch_list_players(server_ids: list[str]) -> str:
+    """批量查看多台服务器当前在线玩家（只读，并发执行）。
+
+    每台基于最近控制台日志推断（**非权威**，口径同 list_players）；
+    单台查询失败单独标注、不阻断其余；结果按 server_ids 顺序排列。
+    """
+    if not server_ids:
+        return "(未指定任何服务器)"
+
+    async def _one(sid: str) -> str:
+        try:
+            players = await panel.online_players(sid)
+            if not players:
+                return f"### {sid}\n(无在线玩家记录)"
+            return f"### {sid}（{len(players)} 人）\n" + "\n".join(f"- {p}" for p in players)
+        except Exception as e:
+            return f"### {sid}\n❌ 查询失败: {e}"
+
+    results = await asyncio.gather(*(_one(sid) for sid in server_ids))
+    return "\n\n".join(results)
+
+
+@mcp.tool()
 async def list_files(server_id: str, directory: str = "/") -> str:
     """列出服务器某目录下的文件与子目录（含大小、类型）。"""
     files = await panel.list_files(server_id, directory)

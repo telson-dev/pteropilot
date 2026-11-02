@@ -133,3 +133,38 @@ async def test_list_players_tool_empty(fake):
     fake.route("GET", "/console", httpx.Response(200, text=""))
     out = await srv.list_players("s1")
     assert "没有检测到在线玩家" in out
+
+
+# ================= 工具层 batch_list_players =================
+
+
+async def test_batch_list_players_all_ok(fake):
+    _bind(fake)
+    fake.route("GET", "/servers/s1/console", httpx.Response(200, text="Steve joined the game\n"))
+    fake.route("GET", "/servers/s2/console", httpx.Response(200, text="Alex joined the game\nBob joined the game\n"))
+    out = await srv.batch_list_players(["s1", "s2"])
+    assert "### s1（1 人）" in out and "Steve" in out
+    assert "### s2（2 人）" in out and "Alex" in out and "Bob" in out
+    assert out.index("### s1") < out.index("### s2")  # 保序
+
+
+async def test_batch_list_players_no_players(fake):
+    _bind(fake)
+    fake.route("GET", "/servers/s1/console", httpx.Response(200, text=""))
+    out = await srv.batch_list_players(["s1"])
+    assert "### s1" in out and "无在线玩家记录" in out
+
+
+async def test_batch_list_players_partial_failure(fake):
+    _bind(fake)
+    fake.route("GET", "/servers/s1/console", httpx.Response(200, text="Steve joined the game\n"))
+    # s2 无路由 → 404 → 单台失败不阻断
+    out = await srv.batch_list_players(["s1", "s2"])
+    assert "### s1" in out and "Steve" in out
+    assert "### s2" in out and "查询失败" in out
+
+
+async def test_batch_list_players_empty(fake):
+    _bind(fake)
+    out = await srv.batch_list_players([])
+    assert "未指定任何服务器" in out

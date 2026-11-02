@@ -5,10 +5,17 @@
 ## [Unreleased]
 
 ### Added
+- `batch_list_players` 批量在线玩家工具：并发查看多台服务器当前在线玩家（只读，口径同 `list_players`——基于日志推断非权威；单台失败不阻断、结果保序）。
+
+## [0.2.7] - 2026-11-02
+
+### Added
 - `get_backup_download` 备份下载工具：获取备份的一次性下载链接（只读，配合 `list_backups` 的 UUID 使用）。
 - `get_server_startup` 启动配置查看工具：显示服务器启动命令、egg 与启动变量（可见性/可编辑性标注，超过 30 个变量自动截断），排查启动失败用。
 - `batch_get_console_log` 批量日志工具：并发读取多台服务器控制台最近日志（只读，单台失败不阻断、结果按输入顺序），适合多台同时出问题时的对比排查。
 - `list_my_servers` 增强：新增 `with_status`（并发拉取每台实时状态并显示）与 `status` 过滤（如 `"running"` 只列在跑的服务器）。
+
+### Changed
 - 性能优化：批量工具并发化——`broadcast_message` / `batch_power` / `batch_backup` 由逐台串行改为 `asyncio.gather` 并发执行（结果保序、单台失败仍不阻断其余），多台场景耗时从 N× 单台延迟降至 ≈1×。
 
 ## [0.2.6] - 2026-11-02
