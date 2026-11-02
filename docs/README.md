@@ -137,7 +137,7 @@
 | `list_my_servers` | 只读 | 列出可访问服务器（`with_status=True` 并发带状态；`status="running"` 按状态过滤） | — |
 | `list_all_servers` | 只读【管理员】 | 列出面板全部服务器 | — |
 | `list_nodes` | 只读【管理员】 | 列出所有节点 | — |
-| `get_server_status` | 只读 | 单服实时状态与资源占用 | — |
+| `get_server_status` | 只读 | 单服实时状态与资源占用（含在线玩家数，日志推断） | — |
 | `list_players` | 只读 | 从控制台日志解析当前在线玩家（非权威，基于最近约 1000 行日志推断，早于此的重启/退出可能被截断） | — |
 | `batch_list_players` | 只读 | 批量查看多台服务器在线玩家（并发，单台失败不阻断） | — |
 | `check_server_health` | 只读 | 对比 current_state 判定健康度（异常态给中文提示与建议） | — |

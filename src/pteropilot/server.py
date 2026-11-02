@@ -127,7 +127,7 @@ async def list_nodes() -> str:
 
 @mcp.tool()
 async def get_server_status(server_id: str) -> str:
-    """查看单个服务器实时状态与资源占用：状态、CPU、内存、磁盘、网络、在线时长。"""
+    """查看单个服务器实时状态与资源占用：状态、CPU、内存、磁盘、网络、在线时长、在线玩家数（日志推断）。"""
     res = await panel.resources(server_id)
     state = res.get("current_state", "?")
     r = res.get("resources", res)
@@ -135,15 +135,22 @@ async def get_server_status(server_id: str) -> str:
     def mb(x: Any) -> str:
         return f"{x / 1024 / 1024:.1f} MB" if isinstance(x, (int, float)) else str(x)
 
-    return (
-        f"服务器: {server_id}\n"
-        f"状态: {state}\n"
-        f"CPU: {r.get('cpu_absolute', '?')}%\n"
-        f"内存: {mb(r.get('memory_bytes'))}\n"
-        f"磁盘: {mb(r.get('disk_bytes'))}\n"
-        f"网络 rx/tx: {r.get('network_rx_bytes', '?')} / {r.get('network_tx_bytes', '?')}\n"
-        f"在线时长: {r.get('uptime', 0)} ms"
-    )
+    lines = [
+        f"服务器: {server_id}",
+        f"状态: {state}",
+        f"CPU: {r.get('cpu_absolute', '?')}%",
+        f"内存: {mb(r.get('memory_bytes'))}",
+        f"磁盘: {mb(r.get('disk_bytes'))}",
+        f"网络 rx/tx: {r.get('network_rx_bytes', '?')} / {r.get('network_tx_bytes', '?')}",
+        f"在线时长: {r.get('uptime', 0)} ms",
+    ]
+    # 在线玩家数：基于控制台日志推断（非权威）；失败静默省略，不影响主输出
+    try:
+        players = await panel.online_players(server_id)
+        lines.append(f"在线玩家: {len(players)}（日志推断）")
+    except Exception:
+        pass
+    return "\n".join(lines)
 
 
 # 面板 current_state 常见取值及其健康判定。

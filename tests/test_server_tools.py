@@ -226,6 +226,31 @@ async def test_get_server_status_string_values(fake):
     assert "running" in out
 
 
+async def test_get_server_status_players_line(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/resources",
+        {"attributes": {"current_state": "running", "resources": {"memory_bytes": 1, "disk_bytes": 1}}},
+    )
+    fake.route("GET", "/console", httpx.Response(200, text="Steve joined the game\nAlex joined the game\n"))
+    out = await srv.get_server_status("s1")
+    assert "在线玩家: 2（日志推断）" in out
+
+
+async def test_get_server_status_players_failure_omitted(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/resources",
+        {"attributes": {"current_state": "running", "resources": {"memory_bytes": 1, "disk_bytes": 1}}},
+    )
+    # 无 /console 路由 → online_players 失败 → 玩家行静默省略，主输出不受影响
+    out = await srv.get_server_status("s1")
+    assert "状态: running" in out
+    assert "在线玩家" not in out
+
+
 async def test_console_log_truncates(fake):
     _bind(fake)
     fake.route("GET", "/console", httpx.Response(200, text="y" * 10000))
