@@ -6,6 +6,7 @@
 
 ### Added
 - `get_backup_download` 备份下载工具：获取备份的一次性下载链接（只读，配合 `list_backups` 的 UUID 使用）。
+- `get_server_startup` 启动配置查看工具：显示服务器启动命令、egg 与启动变量（可见性/可编辑性标注，超过 30 个变量自动截断），排查启动失败用。
 - 性能优化：批量工具并发化——`broadcast_message` / `batch_power` / `batch_backup` 由逐台串行改为 `asyncio.gather` 并发执行（结果保序、单台失败仍不阻断其余），多台场景耗时从 N× 单台延迟降至 ≈1×。
 
 ## [0.2.6] - 2026-11-02

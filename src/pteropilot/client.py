@@ -372,3 +372,8 @@ class PanelClient:
         r.raise_for_status()
         attrs = r.json().get("attributes") or {}
         return attrs.get("url") or ""
+
+    async def get_startup(self, server_id: str) -> dict:
+        r = await self.client.get(f"/servers/{server_id}/startup")
+        r.raise_for_status()
+        return r.json().get("attributes") or {}

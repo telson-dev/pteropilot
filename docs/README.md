@@ -149,6 +149,7 @@
 | `download_file` | 只读 | 获取一次性下载链接（约 15 分钟） | — |
 | `list_backups` | 只读 | 列出备份 | — |
 | `get_backup_download` | 只读 | 获取备份的一次性下载链接（配合 list_backups 的 UUID） | — |
+| `get_server_startup` | 只读 | 查看服务器启动命令与启动变量（egg 配置） | — |
 | `batch_backup_status` | 只读 | 批量遍历我可访问服务器，逐台列出备份数量与最近备份时间（单台失败不阻断整体） | — |
 | `get_console_log` | 只读 | 读取控制台最近日志 | — |
 | `power_signal` | 写入 | start / stop / restart / kill | stop/restart/kill ✅ |

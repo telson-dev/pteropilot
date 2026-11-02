@@ -459,6 +459,34 @@ async def get_backup_download(server_id: str, backup_id: str) -> str:
     return f"🔗 备份下载链接（一次性）:\n{url}"
 
 
+@mcp.tool()
+async def get_server_startup(server_id: str) -> str:
+    """查看服务器的启动命令与启动变量（egg 配置，只读）。
+
+    适合排查启动失败（如变量没配、启动命令被改坏），或了解服务器跑的是什么。
+    """
+    attrs = await panel.get_startup(server_id)
+    cmd = attrs.get("startup_command") or attrs.get("startup") or "(无)"
+    egg = attrs.get("egg") or attrs.get("egg_id") or ""
+    variables = attrs.get("variables") or []
+    lines = [f"🧩 启动命令: {cmd}"]
+    if egg:
+        lines.append(f"Egg: {egg}")
+    if variables:
+        lines.append(f"启动变量（{len(variables)} 个）：")
+        for v in variables[:30]:
+            name = v.get("name") or v.get("env_variable") or "?"
+            val = v.get("server_value") or v.get("default_value") or "(空)"
+            vis = "可见" if v.get("user_viewable", True) else "隐藏"
+            edit = "可改" if v.get("user_editable", False) else "只读"
+            lines.append(f"- {name} = {val} [{vis}/{edit}]")
+        if len(variables) > 30:
+            lines.append(f"…共 {len(variables)} 个变量，仅显示前 30 个")
+    else:
+        lines.append("(无启动变量)")
+    return "\n".join(lines)
+
+
 # ================= 写入 / 危险工具 =================
 
 
