@@ -366,3 +366,9 @@ class PanelClient:
     async def delete_backup(self, server_id: str, backup_id: str) -> None:
         r = await self.client.delete(f"/servers/{server_id}/backups/{backup_id}")
         r.raise_for_status()
+
+    async def backup_download_url(self, server_id: str, backup_id: str) -> str:
+        r = await self.client.get(f"/servers/{server_id}/backups/{backup_id}/download")
+        r.raise_for_status()
+        attrs = r.json().get("attributes") or {}
+        return attrs.get("url") or ""

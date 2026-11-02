@@ -450,6 +450,15 @@ async def list_backups(server_id: str) -> str:
     return "\n".join(lines)
 
 
+@mcp.tool()
+async def get_backup_download(server_id: str, backup_id: str) -> str:
+    """获取备份的一次性下载链接（只读）。配合 list_backups 输出的 UUID 使用。"""
+    url = await panel.backup_download_url(server_id, backup_id)
+    if not url:
+        return "(未获取到下载链接)"
+    return f"🔗 备份下载链接（一次性）:\n{url}"
+
+
 # ================= 写入 / 危险工具 =================
 
 
