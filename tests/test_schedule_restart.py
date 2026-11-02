@@ -99,3 +99,26 @@ def test_schedule_restart_broadcast_failure_cancels(make_client, monkeypatch):
     assert "公告发送失败" in out and "已取消" in out
     # 没有 /power 请求（计划已取消）
     assert not any("/power" in r.url.path for r in fake.requests)
+
+
+def test_schedule_restart_empty_message(make_client):
+    fake = make_client[2]
+    fake.route("POST", "/command", None)
+    out = _run(make_client, False, "srv1", minutes=5, message="   ", confirm=True)
+    assert "公告消息不能为空" in out
+    assert fake.requests == []  # 未发任何请求
+
+
+def test_schedule_restart_restart_failure_swallowed(make_client, monkeypatch):
+    client, cfg, fake = make_client
+    fake.route("POST", "/command", {"ok": True})
+    fake.route("POST", "/power", RuntimeError("panel down"))  # 到点重启失败
+
+    async def no_sleep(_):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    out = _run(make_client, True, "srv1", minutes=5, confirm=True)
+    # 公告成功即返回成功；后台重启失败被静默吞掉，不崩溃、不抛异常
+    assert "已安排" in out
+    assert any("/power" in r.url.path for r in fake.requests)

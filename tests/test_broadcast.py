@@ -103,3 +103,19 @@ async def test_broadcast_partial_failure(fake):
     out = await srv.broadcast_message(["*"], "hi", confirm=True)
     assert "已广播到 1 台" in out and "abc" in out
     assert "失败 1 台" in out and "def" in out
+
+
+async def test_broadcast_skips_server_without_id(fake):
+    _bind(fake)
+    # 一台缺 identifier/id（无 sid）→ 跳过，不参与目标列表
+    fake.route(
+        "GET", "/api/client",
+        _servers_payload([
+            _server("abc"),
+            {"attributes": {"name": "no-id"}},
+        ]),
+    )
+    fake.route("POST", "abc/command", {})
+    out = await srv.broadcast_message(["*"], "hi", confirm=True)
+    assert "已广播到 1 台" in out and "abc" in out
+    assert "no-id" not in out

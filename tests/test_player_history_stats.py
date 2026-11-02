@@ -83,3 +83,15 @@ def test_player_history_stats_lines_clamped(make_client):
     make_client[2].route("GET", "/files/contents", httpx.Response(200, text="x\n"))
     out = _call(make_client, "srv1", lines=10)
     assert "没有发现加入/离开记录" in out
+
+
+def test_player_history_stats_no_online(make_client):
+    # 所有人加入后又离开 → 当前在线为「无人」
+    log = (
+        "[12:00:00] [Server thread/INFO]: Steve joined the game\n"
+        "[12:01:00] [Server thread/INFO]: Steve left the game\n"
+    )
+    make_client[2].route("GET", "/files/contents", httpx.Response(200, text=log))
+    out = _call(make_client, "srv1")
+    assert "当前在线（推断）: 无人" in out
+    assert "Steve ×1" in out  # 上线次数统计不受影响
