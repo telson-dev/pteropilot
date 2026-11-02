@@ -54,15 +54,45 @@ def _name(attrs: dict) -> str:
 
 
 @mcp.tool()
-async def list_my_servers() -> str:
-    """列出当前 API Key 可访问的服务器：标识、名称、UUID。"""
+async def list_my_servers(status: str = "", with_status: bool = False) -> str:
+    """列出当前 API Key 可访问的服务器：标识、名称、UUID。
+
+    - ``with_status=True``：并发拉取每台实时状态并显示（running / offline / ...）；
+    - ``status`` 非空时按状态过滤（如 ``"running"``，不区分大小写），
+      需要 ``with_status=True`` 才生效——适合"列出所有在跑的服务器"。
+    """
     servers = await panel.client_servers()
     if not servers:
         return "(没有可访问的服务器)"
-    lines = []
+    rows = []
     for s in servers:
         a = _attrs(s)
-        lines.append(f"- {a.get('identifier', '?')} | {_name(a)} | {a.get('uuid', '?')}")
+        rows.append((a, _name(a)))
+
+    if not with_status:
+        lines = []
+        for a, name in rows:
+            lines.append(f"- {a.get('identifier', '?')} | {name} | {a.get('uuid', '?')}")
+        return "\n".join(lines)
+
+    async def _state(sid: str) -> str:
+        try:
+            res = await panel.resources(sid)
+            return res.get("current_state", "?")
+        except Exception:
+            return "?"  # 单台状态拉取失败不阻断
+
+    states = await asyncio.gather(*(_state(a.get("identifier") or a.get("id") or "?") for a, _ in rows))
+    lines = [
+        f"- {a.get('identifier', '?')} | {name} | {a.get('uuid', '?')} | {st}"
+        for (a, name), st in zip(rows, states)
+    ]
+    if status:
+        want = status.strip().lower()
+        matched = [l for l in lines if l.split(" | ")[-1].lower() == want]
+        if not matched:
+            return f"(没有状态为 {status} 的服务器)"
+        return f"状态过滤: {status}\n" + "\n".join(matched)
     return "\n".join(lines)
 
 

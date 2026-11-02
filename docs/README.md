@@ -134,7 +134,7 @@
 
 | 工具 | 类型 | 说明 | 需 confirm |
 |---|---|---|---|
-| `list_my_servers` | 只读 | 列出当前 Key 可访问的服务器 | — |
+| `list_my_servers` | 只读 | 列出可访问服务器（`with_status=True` 并发带状态；`status="running"` 按状态过滤） | — |
 | `list_all_servers` | 只读【管理员】 | 列出面板全部服务器 | — |
 | `list_nodes` | 只读【管理员】 | 列出所有节点 | — |
 | `get_server_status` | 只读 | 单服实时状态与资源占用 | — |

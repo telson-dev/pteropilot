@@ -88,6 +88,7 @@
 | `check_server_health` | `GET .../resources` | 对 `current_state` 做分类（healthy/transitional/abnormal/unknown） |
 | `diagnose_crash` | `GET .../resources` + `GET .../console` | 结合状态 + 日志扫描崩溃信号关键词 |
 | `batch_get_status` | `GET .../resources`（逐台循环） | 聚合多台的 `resources` 摘要与 `check_server_health` 健康度 |
+| `batch_get_console_log` | `GET .../console`（逐台并发） | 并发读取多台服务器控制台最近日志（复用 `get_console_log`，asyncio 并发、结果保序、单台失败不阻断） |
 | `batch_backup_status` | `GET .../backups`（逐台循环） | 聚合多台的 `list_backups` 结果（见备份表同一行） |
 | `broadcast_message` | `POST .../command`（逐台循环） | 复用 `send_command` 向多台/全部服务器广播 `say <message>`，无独立批量端点；整体 confirm 门禁在工具层 |
 | `schedule_restart` | `POST .../command` + `POST .../power`（延时） | 先 `send_command` 广播倒计时公告，N 分钟后调用 `power(restart)`；无独立定时端点，计划随 MCP 进程存活 |
