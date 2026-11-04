@@ -161,7 +161,7 @@ async def get_server_status(server_id: str) -> str:
         f"CPU: {r.get('cpu_absolute', '?')}%",
         f"内存: {mb(r.get('memory_bytes'))}",
         f"磁盘: {mb(r.get('disk_bytes'))}",
-        f"网络 rx/tx: {r.get('network_rx_bytes', '?')} / {r.get('network_tx_bytes', '?')}",
+        f"网络 rx/tx: {_fmt_size(r.get('network_rx_bytes'))} / {_fmt_size(r.get('network_tx_bytes'))}",
         f"在线时长: {_fmt_uptime(r.get('uptime', 0))}",
     ]
     # 资源上限（面板返回时才显示，如内存/磁盘配额）

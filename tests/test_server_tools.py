@@ -319,6 +319,22 @@ async def test_get_server_status_uptime_formatted(fake):
     assert "在线时长: 1 小时 1 分 1 秒" in out
 
 
+async def test_get_server_status_network_formatted(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/resources",
+        {
+            "attributes": {
+                "current_state": "running",
+                "resources": {"network_rx_bytes": 1048576, "network_tx_bytes": 2097152},
+            }
+        },
+    )
+    out = await srv.get_server_status("s1")
+    assert "网络 rx/tx: 1.0 MB / 2.0 MB" in out
+
+
 async def test_console_log_truncates(fake):
     _bind(fake)
     fake.route("GET", "/console", httpx.Response(200, text="y" * 10000))
