@@ -71,3 +71,13 @@ def test_list_my_servers_state_failure_tolerated(make_client):
     out = _call(make_client, with_status=True)
     assert "abc | 生存服 | u1 | running" in out
     assert "def | 创造服 | u2 | ?" in out
+
+
+def test_list_my_servers_state_exception_tolerated(make_client):
+    fake = make_client[2]
+    # resources 请求抛异常（模拟网络/面板错误）→ 状态显示 "?"，不阻断其余
+    fake.route("GET", "/servers/abc/resources", RuntimeError("boom"))
+    fake.route("GET", "/api/client", _servers())
+    out = _call(make_client, with_status=True)
+    assert "abc | 生存服 | u1 | ?" in out
+    assert "def | 创造服 | u2 | ?" in out

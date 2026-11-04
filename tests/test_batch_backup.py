@@ -85,6 +85,19 @@ async def test_status_total_size(fake):
     assert "abc" in out and "2 个备份（3.0 MB）" in out
 
 
+async def test_status_invalid_bytes_tolerated(fake):
+    _bind(fake)
+    # 非数字 bytes（面板异常数据）→ 忽略该项，不影响其余统计
+    fake.route("GET", "abc/backups", _backups_payload([
+        {"uuid": "b1", "bytes": "not-a-number", "created_at": "2026-10-01T00:00:00Z"},
+        {"uuid": "b2", "bytes": 1048576, "created_at": "2026-10-05T00:00:00Z"},
+    ]))
+    fake.route("GET", "/api/client", _servers_payload([_server("abc")]))
+
+    out = await srv.batch_backup_status()
+    assert "abc" in out and "2 个备份（1.0 MB）" in out
+
+
 # ================= batch_backup（写）=================
 
 
