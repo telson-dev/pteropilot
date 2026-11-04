@@ -144,6 +144,13 @@ async def get_server_status(server_id: str) -> str:
         f"网络 rx/tx: {r.get('network_rx_bytes', '?')} / {r.get('network_tx_bytes', '?')}",
         f"在线时长: {r.get('uptime', 0)} ms",
     ]
+    # 资源上限（面板返回时才显示，如内存/磁盘配额）
+    mem_limit = r.get("memory_limit")
+    if isinstance(mem_limit, (int, float)) and mem_limit > 0:
+        lines.append(f"内存上限: {mb(mem_limit)}")
+    disk_limit = r.get("disk_limit")
+    if isinstance(disk_limit, (int, float)) and disk_limit > 0:
+        lines.append(f"磁盘上限: {mb(disk_limit)}")
     # 在线玩家数：基于控制台日志推断（非权威）；失败静默省略，不影响主输出
     try:
         players = await panel.online_players(server_id)

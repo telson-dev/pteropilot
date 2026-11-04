@@ -251,6 +251,39 @@ async def test_get_server_status_players_failure_omitted(fake):
     assert "在线玩家" not in out
 
 
+async def test_get_server_status_limits(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/resources",
+        {
+            "attributes": {
+                "current_state": "running",
+                "resources": {
+                    "memory_bytes": 268435456,
+                    "disk_bytes": 1073741824,
+                    "memory_limit": 536870912,
+                    "disk_limit": 2147483648,
+                },
+            }
+        },
+    )
+    out = await srv.get_server_status("s1")
+    assert "内存上限: 512.0 MB" in out
+    assert "磁盘上限: 2048.0 MB" in out
+
+
+async def test_get_server_status_limits_absent(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/resources",
+        {"attributes": {"current_state": "running", "resources": {"memory_bytes": 1, "disk_bytes": 1}}},
+    )
+    out = await srv.get_server_status("s1")
+    assert "内存上限" not in out and "磁盘上限" not in out
+
+
 async def test_console_log_truncates(fake):
     _bind(fake)
     fake.route("GET", "/console", httpx.Response(200, text="y" * 10000))
