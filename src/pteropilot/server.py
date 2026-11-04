@@ -520,9 +520,22 @@ async def download_file(server_id: str, path: str) -> str:
     return f"🔗 下载链接（约 15 分钟有效）:\n{url}"
 
 
+def _fmt_size(n: Any) -> str:
+    """把字节数格式化成人类可读（如 1048576 → '1.0 MB'；非法值 → '?'）。"""
+    if not isinstance(n, (int, float)) or n < 0:
+        return "?"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    i = 0
+    val = float(n)
+    while val >= 1024 and i < len(units) - 1:
+        val /= 1024
+        i += 1
+    return f"{val:.1f} {units[i]}"
+
+
 @mcp.tool()
 async def list_backups(server_id: str) -> str:
-    """列出服务器备份：名称、UUID、大小、完成状态、是否锁定。"""
+    """列出服务器备份：名称、UUID、大小（人类可读）、创建日期、完成状态、是否锁定。"""
     backups = await panel.list_backups(server_id)
     if not backups:
         return "(暂无备份)"
@@ -531,8 +544,10 @@ async def list_backups(server_id: str) -> str:
         a = _attrs(b)
         done = "完成" if a.get("completed_at") else "进行中"
         locked = "已锁定" if a.get("is_locked") else "未锁定"
+        created = (a.get("created_at") or "")[:10]
+        created_txt = f"创建 {created}" if created else "创建 ?"
         lines.append(
-            f"- {a.get('uuid', '?')} | {_name(a)} | {a.get('bytes', '?')} bytes | {done} | {locked}"
+            f"- {a.get('uuid', '?')} | {_name(a)} | {_fmt_size(a.get('bytes'))} | {created_txt} | {done} | {locked}"
         )
     return "\n".join(lines)
 

@@ -323,6 +323,43 @@ async def test_list_backups_unknown_name(fake):
     assert "?" in out  # _name 回退
 
 
+async def test_fmt_size():
+    from pteropilot.server import _fmt_size
+
+    assert _fmt_size(1048576) == "1.0 MB"
+    assert _fmt_size(1073741824) == "1.0 GB"
+    assert _fmt_size(0) == "0.0 B"
+    assert _fmt_size(512) == "512.0 B"
+    assert _fmt_size(None) == "?"
+    assert _fmt_size("x") == "?"
+
+
+async def test_list_backups_size_and_created(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/backups",
+        {
+            "data": [
+                {
+                    "attributes": {
+                        "uuid": "b1",
+                        "name": "backup-1",
+                        "bytes": 1048576,
+                        "created_at": "2026-11-01T10:00:00+00:00",
+                        "completed_at": "2026-11-01T10:05:00+00:00",
+                        "is_locked": False,
+                    }
+                }
+            ]
+        },
+    )
+    out = await srv.list_backups("s1")
+    assert "1.0 MB" in out
+    assert "创建 2026-11-01" in out
+    assert "bytes" not in out  # 原始字节数字不再暴露
+
+
 def test_main_validate_error(monkeypatch, capsys):
     # 配置缺失时 main() 走启动失败分支
     import sys

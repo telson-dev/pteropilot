@@ -44,7 +44,7 @@
 | 工具 | client 方法 | HTTP | 路由 | 载荷形态 | 核对来源 |
 |---|---|---|---|---|---|
 | `list_my_servers` | `client_servers()` | GET | `/api/client`（根路径） | 分页，`data[]`，`attributes` 含 `identifier`/`name`/`uuid` | Pelican 源码 |
-| `get_server_status` | `resources()` | GET | `/api/client/servers/{server}/resources` | 返回 `{ attributes: { current_state, resources: {...} } }`；代码做了 `attributes` 兜底 | Pelican 源码 |
+| `get_server_status` | `resources()` | GET | `/api/client/servers/{server}/resources` | 返回 `{ attributes: { current_state, resources: {...} } }`；代码做了 `attributes` 兜底。输出另含「在线玩家: N（日志推断）」行（内部再调 `online_players()` 走 console 日志解析，非权威、受 ~1000 行截断影响、失败静默省略）；另含「内存上限 / 磁盘上限」（面板返回配额时才显、无配额字段省略）与「在线时长」人类可读格式化（`3661000 ms`→`1 小时 1 分 1 秒`，支持天/时分/分/秒） | Pelican 源码 |
 | `power_signal` | `power()` | POST | `/api/client/servers/{server}/power` | body `{"signal": "start|stop|restart|kill"}` | Pelican 源码 |
 | `batch_power` | `power()`（逐台循环） | POST | `/api/client/servers/{server}/power` × N | 无原生批量端点，客户端循环调用单台 `power()`；整体 confirm 门禁在工具层 | Pelican 源码 |
 | `get_console_log` | `console_log()` | GET | `/api/client/servers/{server}/console` | 返回**纯文本**（非 JSON） | Pelican 源码 |
