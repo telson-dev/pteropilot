@@ -73,6 +73,18 @@ async def test_status_single_failure_not_blocking(fake):
     assert "def" in out and "1 个备份" in out  # def 仍被处理
 
 
+async def test_status_total_size(fake):
+    _bind(fake)
+    fake.route("GET", "abc/backups", _backups_payload([
+        {"uuid": "b1", "bytes": 1048576, "created_at": "2026-10-01T00:00:00Z"},
+        {"uuid": "b2", "bytes": 2097152, "created_at": "2026-10-05T00:00:00Z"},
+    ]))
+    fake.route("GET", "/api/client", _servers_payload([_server("abc")]))
+
+    out = await srv.batch_backup_status()
+    assert "abc" in out and "2 个备份（3.0 MB）" in out
+
+
 # ================= batch_backup（写）=================
 
 

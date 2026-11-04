@@ -661,34 +661,42 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
 
 @mcp.tool()
 async def batch_backup_status() -> str:
-    """批量备份概览（只读）：遍历我可访问的服务器，逐台列出备份数量与最近备份时间。
+    """批量备份概览（只读）：遍历我可访问的服务器，逐台列出备份数量、总大小与最近备份时间。
 
-    适合快速回答「哪些服务器没有最近备份」。单台查询失败单独标注、不阻断整体。
+    适合快速回答「哪些服务器没有最近备份」。单台查询失败单独标注、不阻断整体；
+    多台并发查询。
     """
     servers = await panel.client_servers()
     if not servers:
         return "(没有可访问的服务器)"
-    lines: list[str] = []
-    failed = 0
-    for s in servers:
+
+    async def _one(s: dict) -> str:
         attrs = s.get("attributes") or {}
         sid = attrs.get("identifier") or attrs.get("id") or "?"
         name = attrs.get("name") or sid
         try:
             backups = await panel.list_backups(sid)
             count = len(backups)
+            total = 0
             newest = ""
             for b in backups:
-                created = (b.get("attributes") or {}).get("created_at") or ""
+                a = b.get("attributes") or {}
+                try:
+                    total += int(a.get("bytes") or 0)
+                except (TypeError, ValueError):
+                    pass
+                created = a.get("created_at") or ""
                 if created and (not newest or created > newest):
                     newest = created
             newest_txt = newest.split("T")[0] if newest else "无"
-            lines.append(f"- {sid} | {name} | {count} 个备份 | 最近: {newest_txt}")
+            return f"- {sid} | {name} | {count} 个备份（{_fmt_size(total)}）| 最近: {newest_txt}"
         except Exception:
-            failed += 1
-            lines.append(f"- {sid} | {name} | ❌ 查询失败")
+            return f"- {sid} | {name} | ❌ 查询失败"
+
+    results = await asyncio.gather(*(_one(s) for s in servers))
+    failed = sum(1 for line in results if "查询失败" in line)
     header = f"批量备份概览：共 {len(servers)} 台，失败 {failed} 台："
-    return header + "\n" + "\n".join(lines)
+    return header + "\n" + "\n".join(results)
 
 
 @mcp.tool()

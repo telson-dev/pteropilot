@@ -55,7 +55,7 @@
 
 | 工具 | client 方法 | HTTP | 路由 | 载荷形态 | 核对来源 |
 |---|---|---|---|---|---|
-| `list_files` | `list_files()` | GET | `/api/client/servers/{server}/files/list?directory=...` | `attributes.files[]`（兜底 `data[]`），每项 `name`/`size`/`is_file` | Pelican 源码 |
+| `list_files` | `list_files()` | GET | `/api/client/servers/{server}/files/list?directory=...` | `attributes.files[]`（兜底 `data[]`），每项 `name`/`size`/`is_file`；输出 `size` 经 `_fmt_size` 化为人类可读（`1048576`→`1.0 MB`），目录不再显示 `bytes` | Pelican 源码 |
 | `read_file` | `read_file()` | GET | `/api/client/servers/{server}/files/contents?file=...` | 返回文件**纯文本** | Pelican 源码 |
 | `write_file` | `write_file()` | POST | `/api/client/servers/{server}/files/write?file=...` | body 为**原始文本**（`Content-Type: text/plain`），`file` 走 query | Pelican 源码 |
 | `rename_file` | `rename_file()` | PUT | `/api/client/servers/{server}/files/rename` | body `{"root": dir, "files": [{"from": old, "to": new}]}`（支持批量） | Pelican 源码 |
@@ -68,7 +68,7 @@
 
 | 工具 | client 方法 | HTTP | 路由 | 载荷形态 | 核对来源 |
 |---|---|---|---|---|---|
-| `list_backups` | `list_backups()` | GET | `/api/client/servers/{server}/backups` | `data[]`，`attributes` 含 `uuid`/`name`/`bytes`/`completed_at`/`is_locked` | Pelican 源码 |
+| `list_backups` | `list_backups()` | GET | `/api/client/servers/{server}/backups` | `data[]`，`attributes` 含 `uuid`/`name`/`bytes`/`completed_at`/`is_locked`；输出 `bytes` 经 `_fmt_size` 化为人类可读，并显示创建日期 | Pelican 源码 |
 | `get_backup_download` | `backup_download_url()` | GET | `/api/client/servers/{server}/backups/{backup}/download` | 返回 `attributes.url`（一次性下载链接，配合 `list_backups` 的 UUID） | Pelican 源码 |
 | `create_backup` | `create_backup()` | POST | `/api/client/servers/{server}/backups` | 返回 `attributes`（含 `uuid`） | Pelican 源码 |
 | `restore_backup` | `restore_backup()` | POST | `/api/client/servers/{server}/backups/{backup}/restore` | 无 body | Pelican 源码 |
