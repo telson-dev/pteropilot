@@ -385,15 +385,18 @@ async def batch_list_players(server_ids: list[str]) -> str:
 
 @mcp.tool()
 async def list_files(server_id: str, directory: str = "/") -> str:
-    """列出服务器某目录下的文件与子目录（含大小、类型）。"""
+    """列出服务器某目录下的文件与子目录（含大小/类型，大小人类可读）。"""
     files = await panel.list_files(server_id, directory)
     if not files:
         return f"(目录 {directory} 为空)"
     lines = []
     for f in files:
         a = _attrs(f)
-        kind = "DIR " if a.get("is_file") is False else "FILE"
-        lines.append(f"- [{kind}] {a.get('name', '?')} ({a.get('size', '?')} bytes)")
+        name = a.get("name", "?")
+        if a.get("is_file") is False:
+            lines.append(f"- [DIR ] {name}")
+        else:
+            lines.append(f"- [FILE] {name} ({_fmt_size(a.get('size'))})")
     return "\n".join(lines)
 
 

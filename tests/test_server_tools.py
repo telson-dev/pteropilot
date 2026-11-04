@@ -82,6 +82,20 @@ async def test_list_files_tool(fake):
     )
     out = await srv.list_files("s1", "/")
     assert "[FILE] a.txt" in out and "[DIR ] d" in out
+    assert "bytes" not in out  # 原始字节数不再暴露
+
+
+async def test_list_files_size_human_readable(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/files/list",
+        {"data": [
+            {"attributes": {"name": "big.jar", "size": 1048576, "is_file": True}},
+        ]},
+    )
+    out = await srv.list_files("s1", "/")
+    assert "[FILE] big.jar (1.0 MB)" in out
 
 
 async def test_list_files_tool_empty(fake):
