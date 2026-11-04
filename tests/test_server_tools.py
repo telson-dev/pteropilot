@@ -284,6 +284,27 @@ async def test_get_server_status_limits_absent(fake):
     assert "内存上限" not in out and "磁盘上限" not in out
 
 
+def test_fmt_uptime():
+    from pteropilot.server import _fmt_uptime
+
+    assert _fmt_uptime(3661000) == "1 小时 1 分 1 秒"
+    assert _fmt_uptime(90061000) == "1 天 1 小时 1 分 1 秒"
+    assert _fmt_uptime(5000) == "5 秒"
+    assert _fmt_uptime(0) == "0"
+    assert _fmt_uptime("?") == "?"
+
+
+async def test_get_server_status_uptime_formatted(fake):
+    _bind(fake)
+    fake.route(
+        "GET",
+        "/resources",
+        {"attributes": {"current_state": "running", "resources": {"uptime": 3661000}}},
+    )
+    out = await srv.get_server_status("s1")
+    assert "在线时长: 1 小时 1 分 1 秒" in out
+
+
 async def test_console_log_truncates(fake):
     _bind(fake)
     fake.route("GET", "/console", httpx.Response(200, text="y" * 10000))

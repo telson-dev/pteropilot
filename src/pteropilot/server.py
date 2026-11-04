@@ -125,6 +125,26 @@ async def list_nodes() -> str:
     return "\n".join(lines)
 
 
+def _fmt_uptime(ms: Any) -> str:
+    """把毫秒在线时长格式化成人类可读（如 3661000 → '1 小时 1 分 1 秒'）。"""
+    if not isinstance(ms, (int, float)) or ms <= 0:
+        return str(ms) if isinstance(ms, (int, float)) else str(ms)
+    total = int(ms // 1000)
+    days, rest = divmod(total, 86400)
+    hours, rest = divmod(rest, 3600)
+    minutes, seconds = divmod(rest, 60)
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days} 天")
+    if hours:
+        parts.append(f"{hours} 小时")
+    if minutes:
+        parts.append(f"{minutes} 分")
+    if seconds or not parts:
+        parts.append(f"{seconds} 秒")
+    return " ".join(parts)
+
+
 @mcp.tool()
 async def get_server_status(server_id: str) -> str:
     """查看单个服务器实时状态与资源占用：状态、CPU、内存、磁盘、网络、在线时长、在线玩家数（日志推断）。"""
@@ -142,7 +162,7 @@ async def get_server_status(server_id: str) -> str:
         f"内存: {mb(r.get('memory_bytes'))}",
         f"磁盘: {mb(r.get('disk_bytes'))}",
         f"网络 rx/tx: {r.get('network_rx_bytes', '?')} / {r.get('network_tx_bytes', '?')}",
-        f"在线时长: {r.get('uptime', 0)} ms",
+        f"在线时长: {_fmt_uptime(r.get('uptime', 0))}",
     ]
     # 资源上限（面板返回时才显示，如内存/磁盘配额）
     mem_limit = r.get("memory_limit")
