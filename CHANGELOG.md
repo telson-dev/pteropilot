@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+- `search_server_logs` 日志搜索工具：在服务器日志里搜索关键字（不区分大小写，返回带行号的匹配行，只检索末尾 5000 行，limit 上限 200）——排查崩溃/报错时快速定位，配合 `read_server_logs` / `diagnose_crash` 使用。
+
+## [0.2.11] - 2026-11-05
+
 ### Changed
 - `batch_backup_status` 增强：每台显示备份总大小（人类可读），多台改为并发查询（单台失败仍不阻断）。
 - `get_server_status` 网络流量格式化：rx/tx 由原始字节数改为人类可读（如 `1.0 MB / 2.0 MB`）。

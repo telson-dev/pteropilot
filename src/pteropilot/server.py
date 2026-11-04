@@ -437,6 +437,39 @@ async def read_server_logs(server_id: str, path: str = "logs/latest.log", lines:
     return head + "\n" + text
 
 
+@mcp.tool()
+async def search_server_logs(
+    server_id: str,
+    pattern: str,
+    path: str = "logs/latest.log",
+    limit: int = 50,
+) -> str:
+    """在服务器日志里搜索关键字（不区分大小写），返回匹配行（带绝对行号）。
+
+    适合排查崩溃/报错：如 ``pattern="error"``、``"OutOfMemoryError"``、``"crash"``。
+    只检索日志末尾最多 5000 行；匹配行数超过 ``limit``（上限 200）时只显示前 N 行。
+    """
+    needle = pattern.strip()
+    if not needle:
+        return "搜索关键字不能为空。"
+    limit = max(1, min(int(limit), 200))
+    content = await panel.read_file(server_id, path)
+    if not content:
+        return f"(文件 {path} 为空)"
+    all_lines = content.splitlines()
+    offset = max(0, len(all_lines) - 5000)
+    window = all_lines[offset:]
+    low = needle.lower()
+    hits = [(offset + idx + 1, ln) for idx, ln in enumerate(window) if low in ln.lower()]
+    if not hits:
+        return f"(日志 {path} 末尾 5000 行中没有匹配「{pattern}」的行)"
+    head = f"🔍 日志 {path} 中匹配「{pattern}」：共 {len(hits)} 行"
+    if len(hits) > limit:
+        head += f"（仅显示前 {limit} 行）"
+    body = "\n".join(f"{lineno}: {line}" for lineno, line in hits[:limit])
+    return head + "\n" + body
+
+
 # 玩家在线历史解析：基于 Minecraft 控制台日志行（join/leave/lost connection）。
 _JOIN_MARK = " joined the game"
 _LEAVE_MARKS = (" left the game", " lost connection")

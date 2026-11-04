@@ -146,6 +146,7 @@
 | `list_files` | 只读 | 列出目录内容 | — |
 | `read_file` | 只读 | 读取文本文件 | — |
 | `read_server_logs` | 只读 | 读取游戏服务器日志末尾若干行（默认 logs/latest.log 最后 200 行），用于排查崩溃与报错 | — |
+| `search_server_logs` | 只读 | 在日志里搜索关键字（不区分大小写，带行号，末尾 5000 行内，limit 上限 200） | — |
 | `player_history_stats` | 只读 | 基于日志统计玩家在线历史：当前在线（推断）、上线次数 Top、最近加入/离开活动 | — |
 | `download_file` | 只读 | 获取一次性下载链接（约 15 分钟） | — |
 | `list_backups` | 只读 | 列出备份 | — |
