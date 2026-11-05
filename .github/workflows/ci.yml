@@ -23,3 +23,40 @@ jobs:
 
       - name: Run tests with coverage
         run: uv run pytest tests -q -p no:cacheprovider --cov=pteropilot --cov-report=term-missing --cov-fail-under=90
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version consistency (pyproject vs __init__)
+        run: |
+          python - <<'PY'
+          import pathlib, re
+          py = re.search(r'^version = "([^"]+)"', pathlib.Path('pyproject.toml').read_text(), re.M).group(1)
+          init = re.search(r'__version__ = "([^"]+)"', pathlib.Path('src/pteropilot/__init__.py').read_text()).group(1)
+          assert py == init, f"版本不一致: pyproject={py} vs __init__={init}"
+          print(f"version {py} OK")
+          PY
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Check package metadata
+        run: uvx twine check dist/*
+
+      - name: Verify wheel contents
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          whl = glob.glob('dist/*.whl')[0]
+          names = zipfile.ZipFile(whl).namelist()
+          assert any(n.startswith('pteropilot/') for n in names), 'wheel 缺少 pteropilot 包'
+          bad = [n for n in names if n.startswith(('tests/', 'scripts/', 'docs/'))]
+          assert not bad, f'wheel 不应包含 {bad}'
+          print(f'wheel ok: {whl} ({len(names)} files)')
+          PY
