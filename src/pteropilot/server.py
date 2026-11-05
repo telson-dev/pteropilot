@@ -97,6 +97,58 @@ async def list_my_servers(status: str = "", with_status: bool = False) -> str:
 
 
 @mcp.tool()
+async def check_panel_connection() -> str:
+    """诊断面板连接（首次配置后先跑一次）。
+
+    验证 PANEL_URL / API Key 是否可用，报告可访问服务器数量与密钥角色提示；
+    失败时给出可操作的排查顺序（地址 / 网络 / 密钥）。
+    """
+    url = (config.panel_url or "").rstrip("/")
+    if not url:
+        return (
+            "❌ 未配置面板地址（PANEL_URL）。\n"
+            "请在 MCP 配置里设置形如 https://your-panel.example.com 的地址（要带 https://）。"
+        )
+    lines = [
+        f"面板地址: {url}",
+        f"运行模式: {'只读' if config.readonly else '可写'}",
+    ]
+    try:
+        servers = await panel.client_servers()
+    except Exception as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        lines.append(f"❌ 连接失败：{e}")
+        if status == 401:
+            lines.append("提示：401 = API Key 无效或已撤销，请到面板「账户 → API 凭证」重新生成。")
+        elif status == 403:
+            lines.append(
+                "提示：403 = 密钥权限不足。核心工具走客户端 API，请确认 PANEL_API_KEY 用的是"
+                "客户端密钥（ptlc_ / pacc_），而不是应用密钥（ptla_ / papp_）。"
+            )
+        elif status == 404:
+            lines.append("提示：404 = 地址不对。检查是否漏了路径，或填的不是面板根地址。")
+        else:
+            lines.append(
+                "提示：依次检查 ① 地址是否正确且可从本机访问（浏览器打开面板首页试试）"
+                "② 网络/代理设置 ③ API Key 是否复制完整。"
+            )
+        return "\n".join(lines)
+
+    lines.append(f"✅ 已连通，可访问服务器 {len(servers)} 台")
+    if servers:
+        shown = []
+        for s in servers[:5]:
+            a = _attrs(s)
+            shown.append(f"{a.get('identifier', '?')}({_name(a)})")
+        lines.append("示例: " + "、".join(shown) + (" 等" if len(servers) > 5 else ""))
+    warns = key_role_warnings(config)
+    if warns:
+        lines.append("密钥角色提示:")
+        lines.extend(f"- {w}" for w in warns)
+    return "\n".join(lines)
+
+
+@mcp.tool()
 async def list_all_servers() -> str:
     """【管理员】列出面板上全部服务器：标识、名称、所属节点、挂起状态。"""
     servers = await panel.list_servers()
