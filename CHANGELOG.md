@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Changed
+- `batch_get_status` 并发化：多台服务器状态改为 `asyncio.gather` 并发拉取（结果保序、单台失败仍不阻断），大数量服务器时更快（与其它批量工具统一）。
+
+## [0.2.13] - 2026-11-05
+
 ### Added
 - `check_panel_connection` 连接诊断工具：验证 PANEL_URL / API Key 可用性，失败按 401/403/404 给出可操作提示，成功报告可访问服务器数量与密钥角色警告——首次配置后先跑一次即可确认环境正确。
 

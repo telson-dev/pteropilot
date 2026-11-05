@@ -90,3 +90,32 @@ def test_broadcast_concurrent(make_client, monkeypatch):
     assert sp.max_inflight == 2
     assert elapsed < 0.1 * 1.8
     assert "已广播到 2 台" in out
+
+
+def test_batch_get_status_concurrent(make_client, monkeypatch):
+    client, cfg, fake = make_client
+    sp = SlowPanel(delay=0.1)
+
+    async def client_servers():
+        return [{"attributes": {"identifier": x, "name": x}} for x in ("a", "b", "c")]
+
+    async def resources(sid):
+        sp.inflight += 1
+        sp.max_inflight = max(sp.max_inflight, sp.inflight)
+        await asyncio.sleep(sp.delay)
+        sp.inflight -= 1
+        return {"current_state": "running"}
+
+    sp.client_servers = client_servers
+    sp.resources = resources
+    monkeypatch.setattr(server, "panel", sp)
+    monkeypatch.setattr(server, "config", cfg)
+
+    start = time.monotonic()
+    out = asyncio.run(server.batch_get_status())
+    elapsed = time.monotonic() - start
+
+    assert sp.max_inflight == 3  # 三台并发
+    assert elapsed < 0.1 * 2.2  # 远快于串行 3×
+    assert "共 3 台服务器，成功 3 台、失败 0 台" in out
+    assert out.count("🟢") == 3
