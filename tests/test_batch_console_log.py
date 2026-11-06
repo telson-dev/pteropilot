@@ -48,3 +48,31 @@ def test_batch_get_console_log_partial_failure(make_client):
 def test_batch_get_console_log_empty(make_client):
     out = _call(make_client, [])
     assert "未指定任何服务器" in out
+
+
+def _servers_payload(data):
+    return {
+        "data": data,
+        "meta": {"pagination": {"total_pages": 1, "current_page": 1, "total": len(data)}},
+    }
+
+
+def test_batch_get_console_log_star_all_servers(make_client):
+    fake = make_client[2]
+    # console 路由先注册，避免被 /api/client 前缀路由遮蔽
+    fake.route("GET", "/servers/srv-a/console", httpx.Response(200, text="log-a"))
+    fake.route("GET", "/servers/srv-b/console", httpx.Response(200, text="log-b"))
+    fake.route("GET", "/api/client", _servers_payload([
+        {"attributes": {"identifier": "srv-a", "name": "A"}},
+        {"attributes": {"identifier": "srv-b", "name": "B"}},
+    ]))
+    out = _call(make_client, ["*"])
+    assert "### srv-a" in out and "log-a" in out
+    assert "### srv-b" in out and "log-b" in out
+
+
+def test_batch_get_console_log_star_no_servers(make_client):
+    fake = make_client[2]
+    fake.route("GET", "/api/client", _servers_payload([]))
+    out = _call(make_client, ["*"])
+    assert "没有可访问的服务器" in out

@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Changed
+- 批量工具 `batch_list_players` / `batch_get_console_log` 支持 `server_ids=["*"]`（全部可访问服务器），与 `broadcast_message` 口径一致——"查所有服的在线玩家/日志"一句话搞定。
+
+## [0.2.14] - 2026-11-05
+
+### Changed
 - `batch_get_status` 并发化：多台服务器状态改为 `asyncio.gather` 并发拉取（结果保序、单台失败仍不阻断），大数量服务器时更快（与其它批量工具统一）。
 
 ## [0.2.13] - 2026-11-05

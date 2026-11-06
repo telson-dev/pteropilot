@@ -140,7 +140,7 @@
 | `list_nodes` | 只读【管理员】 | 列出所有节点 | — |
 | `get_server_status` | 只读 | 单服实时状态与资源占用（含在线玩家数，日志推断） | — |
 | `list_players` | 只读 | 从控制台日志解析当前在线玩家（非权威，基于最近约 1000 行日志推断，早于此的重启/退出可能被截断） | — |
-| `batch_list_players` | 只读 | 批量查看多台服务器在线玩家（并发，单台失败不阻断） | — |
+| `batch_list_players` | 只读 | 批量查看多台服务器在线玩家（并发，单台失败不阻断；`["*"]` = 全部服务器） | — |
 | `check_server_health` | 只读 | 对比 current_state 判定健康度（异常态给中文提示与建议） | — |
 | `diagnose_crash` | 只读 | 结合状态与最近控制台日志扫描崩溃信号（内存不足/JVM 崩溃/看门狗超时/SIGSEGV/致命错误），给出检测结果与建议（非权威，基于最近约 1000 行日志） | — |
 | `batch_get_status` | 只读 | 批量拉取我可访问服务器的状态与健康度摘要（单台失败不阻断整体） | — |
@@ -155,7 +155,7 @@
 | `get_server_startup` | 只读 | 查看服务器启动命令与启动变量（egg 配置） | — |
 | `batch_backup_status` | 只读 | 批量遍历我可访问服务器，逐台列出备份数量与最近备份时间（单台失败不阻断整体） | — |
 | `get_console_log` | 只读 | 读取控制台最近日志 | — |
-| `batch_get_console_log` | 只读 | 批量读取多台服务器控制台最近日志（并发，单台失败不阻断） | — |
+| `batch_get_console_log` | 只读 | 批量读取多台服务器控制台最近日志（并发，单台失败不阻断；`["*"]` = 全部服务器） | — |
 | `power_signal` | 写入 | start / stop / restart / kill | stop/restart/kill ✅ |
 | `batch_power` | 写入 | 批量对一组服务器发电源信号（逐台循环、单台失败不阻断整体） | stop/restart/kill ✅ |
 | `batch_backup` | 写入 | 批量创建备份（逐台循环、单台失败不阻断其余） | ✅ |

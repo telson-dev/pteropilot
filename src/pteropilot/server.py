@@ -50,6 +50,20 @@ def _name(attrs: dict) -> str:
     return attrs.get("name") or attrs.get("identifier") or "?"
 
 
+async def _resolve_target_ids(server_ids: list[str]) -> list[str]:
+    """批量工具的目标解析：``["*"]`` → 当前可访问的全部服务器标识；否则原样返回。"""
+    if server_ids != ["*"]:
+        return list(server_ids)
+    servers = await panel.client_servers()
+    ids: list[str] = []
+    for s in servers:
+        a = _attrs(s)
+        sid = a.get("identifier") or a.get("id")
+        if sid:
+            ids.append(str(sid))
+    return ids
+
+
 # ================= 只读工具 =================
 
 
@@ -416,11 +430,15 @@ async def list_players(server_id: str) -> str:
 async def batch_list_players(server_ids: list[str]) -> str:
     """批量查看多台服务器当前在线玩家（只读，并发执行）。
 
+    ``server_ids`` 传 ``["*"]`` 表示全部可访问服务器（口径同 broadcast_message）。
     每台基于最近控制台日志推断（**非权威**，口径同 list_players）；
-    单台查询失败单独标注、不阻断其余；结果按 server_ids 顺序排列。
+    单台查询失败单独标注、不阻断其余；结果按输入顺序排列。
     """
     if not server_ids:
         return "(未指定任何服务器)"
+    target_ids = await _resolve_target_ids(server_ids)
+    if not target_ids:
+        return "(没有可访问的服务器)"
 
     async def _one(sid: str) -> str:
         try:
@@ -431,7 +449,7 @@ async def batch_list_players(server_ids: list[str]) -> str:
         except Exception as e:
             return f"### {sid}\n❌ 查询失败: {e}"
 
-    results = await asyncio.gather(*(_one(sid) for sid in server_ids))
+    results = await asyncio.gather(*(_one(sid) for sid in target_ids))
     return "\n\n".join(results)
 
 
@@ -838,11 +856,15 @@ async def get_console_log(server_id: str, max_chars: int = 8000) -> str:
 async def batch_get_console_log(server_ids: list[str], max_chars: int = 3000) -> str:
     """批量读取多台服务器的控制台最近日志（只读，并发执行）。
 
+    ``server_ids`` 传 ``["*"]`` 表示全部可访问服务器（口径同 broadcast_message）。
     适合「多台服务器同时出问题」的场景：一次拿多台的控制台输出对比。
-    单台读取失败单独标注、不阻断其余；每台输出按 server_ids 顺序排列。
+    单台读取失败单独标注、不阻断其余；每台输出按输入顺序排列。
     """
     if not server_ids:
         return "(未指定任何服务器)"
+    target_ids = await _resolve_target_ids(server_ids)
+    if not target_ids:
+        return "(没有可访问的服务器)"
 
     async def _one(sid: str) -> str:
         try:
@@ -853,7 +875,7 @@ async def batch_get_console_log(server_ids: list[str], max_chars: int = 3000) ->
         except Exception as e:
             return f"### {sid}\n❌ 读取失败: {e}"
 
-    results = await asyncio.gather(*(_one(sid) for sid in server_ids))
+    results = await asyncio.gather(*(_one(sid) for sid in target_ids))
     return "\n\n".join(results)
 
 

@@ -168,3 +168,30 @@ async def test_batch_list_players_empty(fake):
     _bind(fake)
     out = await srv.batch_list_players([])
     assert "未指定任何服务器" in out
+
+
+async def test_batch_list_players_star_all_servers(fake):
+    _bind(fake)
+    # console 路由先注册，避免被 /api/client 前缀路由遮蔽
+    fake.route("GET", "/servers/s1/console", httpx.Response(200, text="Steve joined the game\n"))
+    fake.route("GET", "/servers/s2/console", httpx.Response(200, text="Alex joined the game\n"))
+    fake.route(
+        "GET", "/api/client",
+        {
+            "data": [
+                {"attributes": {"identifier": "s1", "name": "A"}},
+                {"attributes": {"identifier": "s2", "name": "B"}},
+            ],
+            "meta": {"pagination": {"total_pages": 1, "current_page": 1, "total": 2}},
+        },
+    )
+    out = await srv.batch_list_players(["*"])
+    assert "### s1（1 人）" in out and "Steve" in out
+    assert "### s2（1 人）" in out and "Alex" in out
+
+
+async def test_batch_list_players_star_no_servers(fake):
+    _bind(fake)
+    fake.route("GET", "/api/client", {"data": [], "meta": {"pagination": {"total_pages": 1, "current_page": 1, "total": 0}}})
+    out = await srv.batch_list_players(["*"])
+    assert "没有可访问的服务器" in out
