@@ -32,6 +32,21 @@ Requires Python 3.12+. Run in one line with [`uv`](https://docs.astral.sh/uv/):
 uvx pteropilot
 ```
 
+### Upgrade to the latest
+
+`uvx` reuses its cache — pull the latest on purpose:
+
+```bash
+uvx --refresh pteropilot      # or: uvx pteropilot@latest
+pip install -U pteropilot     # if you installed via pip
+```
+
+**PyPI can lag behind GitHub** while a release is pending. For the freshest build, install straight from the repo:
+
+```bash
+uvx --from git+https://github.com/telson-dev/pteropilot pteropilot
+```
+
 ## Configure
 
 Add this to your MCP client config (Claude Desktop, Cursor, etc.):
@@ -157,7 +172,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.7** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.16** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

@@ -32,6 +32,21 @@ PteroPilot 是一个开源 MCP server，让 Claude、Cursor 等 AI 助手直接�
 uvx pteropilot
 ```
 
+### 升级到最新版
+
+`uvx` 会复用缓存，要主动拉最新版：
+
+```bash
+uvx --refresh pteropilot      # 或 uvx pteropilot@latest
+pip install -U pteropilot     # pip 安装方式
+```
+
+**PyPI 版本可能滞后于 GitHub**（发布排队时）。要装到最新开发版，直接从仓库安装：
+
+```bash
+uvx --from git+https://github.com/telson-dev/pteropilot pteropilot
+```
+
 ## 配置
 
 在你的 MCP 客户端（Claude Desktop、Cursor 等）配置文件中加入：
@@ -136,7 +151,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.7**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.16**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 
