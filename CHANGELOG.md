@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+- `get_server_network` 网络分配查看工具：列出服务器 IP/端口（主地址 ⭐ 标记、附加端口、备注，优先显示 `ip_alias` 域名）——第 37 个工具，MC 服主查"服务器地址是多少"直接用。
+
+## [0.2.16] - 2026-11-06
+
 ### Changed
 - 写操作批量工具 `batch_power` / `batch_backup` 也支持 `server_ids=["*"]`（全部可访问服务器）；**安全设计**：`["*"]` 作用于全部服务器时任何电源信号都必须 `confirm=True`（即使是 start，防误启动全部）。
 

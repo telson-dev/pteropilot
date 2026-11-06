@@ -304,6 +304,31 @@ async def batch_get_status() -> str:
 
 
 @mcp.tool()
+async def get_server_network(server_id: str) -> str:
+    """查看服务器的网络分配（IP / 端口，只读）：主地址与附加端口、备注。"""
+    allocs = await panel.network_allocations(server_id)
+    if not allocs:
+        return "(没有网络分配记录)"
+    lines = []
+    primary_addr = ""
+    for it in allocs:
+        a = _attrs(it)
+        ip = a.get("ip_alias") or a.get("ip") or "?"
+        port = a.get("port", "?")
+        mark = " ⭐主地址" if a.get("is_primary") else ""
+        notes = a.get("notes") or ""
+        note_txt = f"（{notes}）" if notes else ""
+        addr = f"{ip}:{port}"
+        if a.get("is_primary") and not primary_addr:
+            primary_addr = addr
+        lines.append(f"- {addr}{mark}{note_txt}")
+    head = f"共 {len(allocs)} 个网络分配"
+    if primary_addr:
+        head += f"，主地址: {primary_addr}"
+    return head + "：\n" + "\n".join(lines)
+
+
+@mcp.tool()
 async def check_server_health(server_id: str) -> str:
     """检查服务器健康度：对比 current_state，把异常态翻译成中文结构化提示。
 

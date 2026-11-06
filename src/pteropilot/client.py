@@ -227,6 +227,12 @@ class PanelClient:
         payload = r.json()
         return payload.get("attributes", payload)
 
+    async def network_allocations(self, server_id: str) -> list[dict]:
+        """服务器网络分配（IP/端口）：主分配与附加端口。"""
+        r = await self.client.get(f"/servers/{server_id}/network/allocations")
+        r.raise_for_status()
+        return r.json().get("data", [])
+
     # ================= 电源 / 控制台 =================
 
     async def power(self, server_id: str, signal: str) -> None:
