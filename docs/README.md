@@ -157,8 +157,8 @@
 | `get_console_log` | 只读 | 读取控制台最近日志 | — |
 | `batch_get_console_log` | 只读 | 批量读取多台服务器控制台最近日志（并发，单台失败不阻断；`["*"]` = 全部服务器） | — |
 | `power_signal` | 写入 | start / stop / restart / kill | stop/restart/kill ✅ |
-| `batch_power` | 写入 | 批量对一组服务器发电源信号（逐台循环、单台失败不阻断整体） | stop/restart/kill ✅ |
-| `batch_backup` | 写入 | 批量创建备份（逐台循环、单台失败不阻断其余） | ✅ |
+| `batch_power` | 写入 | 批量对一组服务器发电源信号（逐台循环、单台失败不阻断整体；`["*"]` = 全部服务器，任何信号都需 confirm） | stop/restart/kill ✅（`["*"]` 全部 ✅） |
+| `batch_backup` | 写入 | 批量创建备份（逐台循环、单台失败不阻断其余；`["*"]` = 全部服务器） | ✅ |
 | `send_command` | 写入 | 发控制台指令 | — |
 | `broadcast_message` | 写入 | 批量向多台 / 全部服务器控制台广播 `say <message>`（`["*"]` 表示全部；单台失败不阻断） | ? |
 | `schedule_restart` | 写入 | 安排服务器 N 分钟后自动重启（先广播公告，到点自动 restart；计划随进程存活） | ✅ |

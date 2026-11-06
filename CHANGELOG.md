@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Changed
+- 写操作批量工具 `batch_power` / `batch_backup` 也支持 `server_ids=["*"]`（全部可访问服务器）；**安全设计**：`["*"]` 作用于全部服务器时任何电源信号都必须 `confirm=True`（即使是 start，防误启动全部）。
+
+## [0.2.15] - 2026-11-06
+
+### Changed
 - 批量工具 `batch_list_players` / `batch_get_console_log` 支持 `server_ids=["*"]`（全部可访问服务器），与 `broadcast_message` 口径一致——"查所有服的在线玩家/日志"一句话搞定。
 
 ## [0.2.14] - 2026-11-05

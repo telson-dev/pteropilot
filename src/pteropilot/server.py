@@ -723,7 +723,9 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
 
     - 只读模式下整体拒绝，不发出任何请求；
     - signal 非法则整体拒绝；
-    - stop/restart/kill 需整体 confirm=True（一次确认覆盖整批，start 免确认）；
+    - ``server_ids=["*"]`` 表示全部可访问服务器——**写操作作用于全部服务器，任何
+      信号都必须 confirm=True**（即使是 start，防止误启动全部服务器）；
+    - 显式列表时 stop/restart/kill 需整体 confirm=True（一次确认覆盖整批，start 免确认）；
     - 逐台 apply，单台失败（超时/无权限/面板报错）单独标注、不阻断其余服务器。
     """
     denied = _denied_if_readonly()
@@ -733,8 +735,13 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
         return "(未指定任何服务器)"
     if signal not in POWER_SIGNALS:
         return f"非法信号 {signal}，可选: {', '.join(POWER_SIGNALS)}"
-    if signal in ("stop", "restart", "kill"):
-        blocked = _need_confirm(confirm, f"批量 {signal}（{len(server_ids)} 台服务器）")
+    target_ids = await _resolve_target_ids(server_ids)
+    if not target_ids:
+        return "(没有可访问的服务器)"
+    all_servers = server_ids == ["*"]
+    if signal in ("stop", "restart", "kill") or all_servers:
+        what = f"批量 {signal}（{'全部' if all_servers else ''}{len(target_ids)} 台服务器）"
+        blocked = _need_confirm(confirm, what)
         if blocked:
             return blocked
 
@@ -751,14 +758,14 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
             return f"- {sid} | ❌ 失败（无权限/超时/面板报错）"
 
     # 并发执行（gather 保序）：面板无批量端点，但并发调用显著缩短整批耗时。
-    for line in await asyncio.gather(*(_apply(sid) for sid in server_ids)):
+    for line in await asyncio.gather(*(_apply(sid) for sid in target_ids)):
         lines.append(line)
         if "✅" in line:
             ok += 1
         else:
             failed += 1
 
-    header = f"批量 {signal}：共 {len(server_ids)} 台，成功 {ok} 台、失败 {failed} 台："
+    header = f"批量 {signal}：共 {len(target_ids)} 台，成功 {ok} 台、失败 {failed} 台："
     return header + "\n" + "\n".join(lines)
 
 
@@ -809,6 +816,7 @@ async def batch_backup(server_ids: list[str], confirm: bool = False) -> str:
     面板 API 无原生批量备份端点，退化为「逐台循环调用单台 create_backup + 整体二次确认」：
     - 只读模式下整体拒绝；
     - 未指定服务器或 confirm=False 时整体拒绝；
+    - ``server_ids=["*"]`` 表示全部可访问服务器（写操作作用于全部，必须 confirm=True）；
     - 逐台创建，单台失败（超时/无权限/面板报错）单独标注、不阻断其余服务器。
     """
     denied = _denied_if_readonly()
@@ -816,7 +824,10 @@ async def batch_backup(server_ids: list[str], confirm: bool = False) -> str:
         return denied
     if not server_ids:
         return "(未指定任何服务器)"
-    blocked = _need_confirm(confirm, f"批量创建备份（{len(server_ids)} 台服务器）")
+    target_ids = await _resolve_target_ids(server_ids)
+    if not target_ids:
+        return "(没有可访问的服务器)"
+    blocked = _need_confirm(confirm, f"批量创建备份（{len(target_ids)} 台服务器）")
     if blocked:
         return blocked
 
@@ -832,14 +843,14 @@ async def batch_backup(server_ids: list[str], confirm: bool = False) -> str:
             return f"- {sid} | ❌ 创建失败（无权限/超时/面板报错）"
 
     # 并发执行（gather 保序）：面板无批量备份端点，并发调用缩短整批耗时。
-    for line in await asyncio.gather(*(_create(sid) for sid in server_ids)):
+    for line in await asyncio.gather(*(_create(sid) for sid in target_ids)):
         lines.append(line)
         if "✅" in line:
             ok += 1
         else:
             failed += 1
 
-    header = f"批量创建备份：共 {len(server_ids)} 台，成功 {ok} 台、失败 {failed} 台："
+    header = f"批量创建备份：共 {len(target_ids)} 台，成功 {ok} 台、失败 {failed} 台："
     return header + "\n" + "\n".join(lines)
 
 

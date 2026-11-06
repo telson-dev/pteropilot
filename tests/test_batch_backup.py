@@ -136,3 +136,28 @@ async def test_backup_single_failure_not_blocking(fake):
     assert "成功 1 台、失败 1 台" in out
     assert "abc" in out and "❌" in out
     assert "def" in out and "✅" in out
+
+
+async def test_backup_star_all_servers(fake):
+    _bind(fake)
+    fake.route("GET", "/api/client", _servers_payload([_server("abc"), _server("def")]))
+    fake.route("POST", "abc/backups", {"attributes": {"uuid": "u1"}})
+    fake.route("POST", "def/backups", {"attributes": {"uuid": "u2"}})
+    out = await srv.batch_backup(["*"], confirm=True)
+    assert "共 2 台，成功 2 台、失败 0 台" in out
+    assert "u1" in out and "u2" in out
+
+
+async def test_backup_star_requires_confirm(fake):
+    _bind(fake)
+    fake.route("GET", "/api/client", _servers_payload([_server("abc")]))
+    out = await srv.batch_backup(["*"], confirm=False)
+    assert "已拦截" in out
+    assert not any(r.method == "POST" for r in fake.requests)
+
+
+async def test_backup_star_no_servers(fake):
+    _bind(fake)
+    fake.route("GET", "/api/client", _servers_payload([]))
+    out = await srv.batch_backup(["*"], confirm=True)
+    assert "没有可访问的服务器" in out

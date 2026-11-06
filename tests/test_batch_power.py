@@ -96,3 +96,40 @@ async def test_batch_power_readonly_stop_confirm(fake):
     out = await srv.batch_power(["s1", "s2"], "stop", confirm=True)
     assert "只读模式" in out
     assert fake.requests == []
+
+
+def _servers_payload(data):
+    return {
+        "data": data,
+        "meta": {"pagination": {"total_pages": 1, "current_page": 1, "total": len(data)}},
+    }
+
+
+def _server(identifier):
+    return {"attributes": {"identifier": identifier, "name": identifier}}
+
+
+async def test_batch_power_star_start_requires_confirm(fake):
+    # ["*"] = 全部服务器，写操作作用于全部 → start 也必须 confirm（防误启动全部）
+    _bind(fake)
+    fake.route("GET", "/api/client", _servers_payload([_server("s1"), _server("s2")]))
+    out = await srv.batch_power(["*"], "start")
+    assert "高危" in out and "confirm=True" in out
+    assert not any(r.method == "POST" for r in fake.requests)
+
+
+async def test_batch_power_star_confirm_applies_all(fake):
+    _bind(fake)
+    fake.route("GET", "/api/client", _servers_payload([_server("s1"), _server("s2")]))
+    fake.route("POST", "/power", {})
+    out = await srv.batch_power(["*"], "start", confirm=True)
+    assert "共 2 台，成功 2 台、失败 0 台" in out
+    assert "s1 | ✅" in out and "s2 | ✅" in out
+
+
+async def test_batch_power_star_no_servers(fake):
+    _bind(fake)
+    fake.route("GET", "/api/client", _servers_payload([]))
+    out = await srv.batch_power(["*"], "start", confirm=True)
+    assert "没有可访问的服务器" in out
+    assert not any(r.method == "POST" for r in fake.requests)
