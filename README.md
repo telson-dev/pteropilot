@@ -112,7 +112,10 @@ storms when cron runs every few minutes),
 `~/.pteropilot/alerts_state.json`),
 `--confirm-count <n>` (require N consecutive abnormal detections before
 notifying — filters transient flaps; recovery resets the counter),
-`--config <path>` (per-server tuning file; default `~/.pteropilot/alerts.json`).
+`--config <path>` (per-server tuning file; default `~/.pteropilot/alerts.json`),
+`--dry-run` (rehearsal: print which servers *would* be notified and on which
+channels, without sending anything or touching the state file — handy when
+tuning thresholds or before turning cron on).
 
 Email channel (second notifier, can be combined with the webhook):
 

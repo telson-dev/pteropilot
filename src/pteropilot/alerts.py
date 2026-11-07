@@ -196,6 +196,7 @@ async def scan_and_notify(
     smtp_from: str = "",
     confirm_count: int = 1,
     config_file: Path | None = None,
+    dry_run: bool = False,
 ) -> dict:
     """扫描全部可访问服务器，异常者逐台推送告警（webhook 和/或邮件）。
 
@@ -206,7 +207,8 @@ async def scan_and_notify(
                    避免瞬时抖动误报；恢复健康会清零计数。
     state_file: 冷却/确认状态持久化位置（默认 ~/.pteropilot/alerts_state.json）。
     smtp_*: 邮件通道（host+user+password+to 齐了才会发邮件；可与 webhook 同时使用）。
-    返回 {checked, abnormal, notified, suppressed, pending, errors}。
+    dry_run: 演练模式——不真的推送/发邮件，也不写状态文件；返回里给出「将会通知哪些服务器」。
+    返回 {checked, abnormal, notified, planned, plans, suppressed, pending, errors}。
     """
     cfg = Config()
     cfg.validate()
@@ -226,6 +228,8 @@ async def scan_and_notify(
     checked = 0
     abnormal = 0
     notified = 0
+    planned = 0
+    plans: list[dict] = []
     suppressed = 0
     pending = 0
     errors: list[str] = []
@@ -282,20 +286,31 @@ async def scan_and_notify(
                     except Exception:
                         details.append("（日志读取失败，跳过日志级信号）")
                 message = build_alert_message(ident, state_now, details)
-                if wh_url:
-                    await send_webhook(wh_url, message)
-                if mail_to:
-                    await send_email(
-                        to=mail_to,
-                        subject=f"PteroPilot 告警：服务器 {ident} 状态异常（{state_now}）",
-                        content=message,
-                        host=smtp_host,
-                        user=smtp_user,
-                        password=smtp_password,
-                        port=smtp_port,
-                        frm=smtp_from or None,
-                    )
                 if wh_url or mail_to:
+                    if dry_run:
+                        # 演练：不真的发，只记录将要发到哪些渠道（也不推进状态/冷却时钟）
+                        plans.append(
+                            {
+                                "server": ident,
+                                "state": state_now,
+                                "channels": [c for c, on in (("webhook", bool(wh_url)), ("email", bool(mail_to))) if on],
+                            }
+                        )
+                        planned += 1
+                        continue
+                    if wh_url:
+                        await send_webhook(wh_url, message)
+                    if mail_to:
+                        await send_email(
+                            to=mail_to,
+                            subject=f"PteroPilot 告警：服务器 {ident} 状态异常（{state_now}）",
+                            content=message,
+                            host=smtp_host,
+                            user=smtp_user,
+                            password=smtp_password,
+                            port=smtp_port,
+                            frm=smtp_from or None,
+                        )
                     notified += 1
                 if state is not None:
                     state[ident] = {"state": state_now, "hits": hits, "ts": time.time()}
@@ -305,13 +320,15 @@ async def scan_and_notify(
                 errors.append(f"{ident}: {type(exc).__name__}: {redact(str(exc))}")
     finally:
         await client.aclose()
-        if state is not None and path is not None:
+        if state is not None and path is not None and not dry_run:
             save_state(path, state)
 
     return {
         "checked": checked,
         "abnormal": abnormal,
         "notified": notified,
+        "planned": planned,
+        "plans": plans,
         "suppressed": suppressed,
         "pending": pending,
         "errors": errors,
@@ -356,6 +373,7 @@ def main() -> None:
     parser.add_argument("--mail-from", default=os.environ.get("MAIL_FROM", ""), help="发件人邮箱（默认同 smtp-user）")
     parser.add_argument("--confirm-count", type=int, default=int(os.environ.get("CONFIRM_COUNT", "1")), help="连续确认阈值：同一服务器连续 N 次检测异常才推送（默认 1 = 立即推送；设 2+ 防瞬时抖动误报）")
     parser.add_argument("--config", default=None, help="按服务器级别配置路径（默认 ~/.pteropilot/alerts.json，存在即生效）")
+    parser.add_argument("--dry-run", action="store_true", help="演练模式：只打印将会通知哪些服务器，不真的推送/发邮件、不写状态文件")
     args = parser.parse_args()
 
     if not args.webhook and not (args.smtp_host and args.smtp_user and args.mail_to):
@@ -377,6 +395,7 @@ def main() -> None:
             smtp_from=args.mail_from,
             confirm_count=args.confirm_count,
             config_file=Path(args.config) if args.config else None,
+            dry_run=args.dry_run,
         )
     )
     channels = []
@@ -384,12 +403,22 @@ def main() -> None:
         channels.append("webhook")
     if args.smtp_host and args.smtp_user and args.mail_to:
         channels.append("邮件")
-    print(
-        f"扫描完成（通知渠道: {'+'.join(channels) or '无'}）：检查 {result['checked']} 台，"
-        f"异常 {result['abnormal']} 台，已推送 {result['notified']} 台"
-        + (f"，冷却跳过 {result['suppressed']} 台" if result["suppressed"] else "")
-        + (f"，确认中 {result['pending']} 台" if result["pending"] else "")
-    )
+    if args.dry_run:
+        print(
+            f"演练模式（不实际发送，通道: {'+'.join(channels) or '无'}）：检查 {result['checked']} 台，"
+            f"异常 {result['abnormal']} 台，将通知 {result['planned']} 台"
+            + (f"，冷却跳过 {result['suppressed']} 台" if result["suppressed"] else "")
+            + (f"，确认中 {result['pending']} 台" if result["pending"] else "")
+        )
+        for p in result["plans"]:
+            print(f"  将通知: {p['server']}（状态 {p['state']}，渠道 {'+'.join(p['channels']) or '无'}）")
+    else:
+        print(
+            f"扫描完成（通知渠道: {'+'.join(channels) or '无'}）：检查 {result['checked']} 台，"
+            f"异常 {result['abnormal']} 台，已推送 {result['notified']} 台"
+            + (f"，冷却跳过 {result['suppressed']} 台" if result["suppressed"] else "")
+            + (f"，确认中 {result['pending']} 台" if result["pending"] else "")
+        )
     for e in result["errors"]:
         print(f"  查询失败: {e}")
 

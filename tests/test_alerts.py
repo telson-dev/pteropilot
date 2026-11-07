@@ -140,7 +140,16 @@ async def test_scan_no_servers(fake, env_panel, monkeypatch):
     monkeypatch.setattr(alerts, "send_webhook", spy)
     fake.route("GET", "/api/client", _servers_payload([]))
     result = await alerts.scan_and_notify("https://hook.example/send")
-    assert result == {"checked": 0, "abnormal": 0, "notified": 0, "suppressed": 0, "pending": 0, "errors": []}
+    assert result == {
+        "checked": 0,
+        "abnormal": 0,
+        "notified": 0,
+        "planned": 0,
+        "plans": [],
+        "suppressed": 0,
+        "pending": 0,
+        "errors": [],
+    }
 
 
 async def test_scan_single_failure_not_blocking(fake, env_panel, monkeypatch):
@@ -832,3 +841,51 @@ def test_alerts_state_file_contains_no_credentials(tmp_path):
     alerts.save_state(p, {"s1": {"state": "offline", "hits": 1, "ts": 1.0}})
     raw = p.read_text(encoding="utf-8")
     assert "http" not in raw and "smtp" not in raw.lower() and "password" not in raw.lower()
+
+
+async def test_scan_dry_run_does_not_send_or_persist(fake, env_panel, monkeypatch, tmp_path):
+    sent = []
+
+    async def spy(webhook, content, token=None):
+        sent.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+    state = tmp_path / "state.json"
+
+    result = await alerts.scan_and_notify(
+        "https://hook.example/send",
+        cooldown_minutes=60,
+        state_file=state,
+        dry_run=True,
+    )
+    assert sent == []
+    assert result["notified"] == 0
+    assert result["planned"] == 1
+    assert result["plans"][0]["server"] == "s1"
+    assert result["plans"][0]["channels"] == ["webhook"]
+    assert not state.exists()
+
+
+async def test_scan_dry_run_then_real_run_still_notifies(fake, env_panel, monkeypatch, tmp_path):
+    sent = []
+
+    async def spy(webhook, content, token=None):
+        sent.append(content)
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "s1/resources", {"current_state": "offline"})
+    fake.route("GET", "s1/console", httpx.Response(200, text="x"))
+    fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
+    state = tmp_path / "state.json"
+
+    await alerts.scan_and_notify(
+        "https://hook.example/send", cooldown_minutes=60, state_file=state, dry_run=True
+    )
+    result = await alerts.scan_and_notify(
+        "https://hook.example/send", cooldown_minutes=60, state_file=state
+    )
+    assert result["notified"] == 1
+    assert len(sent) == 1
