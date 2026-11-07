@@ -16,6 +16,7 @@ No panel login, no digging through logs — just ask.
 
 - 📊 List servers, live status, and resource usage
 - 🌐 Network addresses: IP/port allocations with the primary address marked ("what's my server address?")
+- 🗄️ Databases: the panel-assigned database host/db/user for plugins that need MySQL (LuckPerms, CoreProtect…)
 - ⚡ Power controls: start / stop / restart / kill
 - 🖥️ Console: send commands
 - 📁 Files: browse, read, write, upload, rename, delete, create folders, one-time download links
@@ -178,7 +179,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.18** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.19** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

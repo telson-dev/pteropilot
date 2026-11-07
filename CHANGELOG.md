@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Added
+- `list_databases` 数据库查看工具（第 38 个）：列出服务器在面板里已分配的数据库——主机地址、库名、用户名、来源限制；只读，不改权限。适合配置 LuckPerms / CoreProtect 等需要 MySQL 的插件时查「数据库地址和账号」。密码不在客户端 API 返回范围内，工具会明确提示去面板查看。
+
+## [0.2.19] - 2026-11-07
+
+### Added
 - `pteropilot-alerts --json` 机器可读输出：把扫描结果（含 `errors`/`channels`/`planned`）以 JSON 打印，便于 cron / 监控脚本解析（可与 `--dry-run` 组合）。
 
 ### Fixed

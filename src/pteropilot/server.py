@@ -329,6 +329,32 @@ async def get_server_network(server_id: str) -> str:
 
 
 @mcp.tool()
+async def list_databases(server_id: str) -> str:
+    """查看服务器在面板里已分配的数据库（MySQL）：主机地址、库名、用户名、来源限制。
+
+    只读，不创建/删除数据库、不修改权限。适合 MC 服主配置插件（如 LuckPerms /
+    CoreProtect 需要 MySQL）时查「数据库地址和账号是什么」。
+    **密码不在客户端 API 返回范围内**，需到面板网页端查看。
+    """
+    dbs = await panel.databases(server_id)
+    if not dbs:
+        return "(该服务器没有分配数据库；如需 MySQL 请联系面板管理员在面板中创建)"
+    lines: list[str] = []
+    for d in dbs:
+        a = _attrs(d)
+        host = a.get("host") or {}
+        host_addr = host.get("host") or host.get("address") or "?"
+        port = host.get("port", "?")
+        name = a.get("name") or "?"
+        user = a.get("username") or "?"
+        conn = a.get("connections_from") or "%"
+        lines.append(
+            f"- {name} | 主机 {host_addr}:{port} | 用户名 {user} | 来源限制 {conn}"
+        )
+    return f"共 {len(dbs)} 个数据库（密码需到面板网页端查看）：\n" + "\n".join(lines)
+
+
+@mcp.tool()
 async def check_server_health(server_id: str) -> str:
     """检查服务器健康度：对比 current_state，把异常态翻译成中文结构化提示。
 

@@ -233,6 +233,12 @@ class PanelClient:
         r.raise_for_status()
         return r.json().get("data", [])
 
+    async def databases(self, server_id: str) -> list[dict]:
+        """服务器数据库列表（面板分配的 MySQL 数据库：主机/库名/用户名）。"""
+        r = await self.client.get(f"/servers/{server_id}/databases")
+        r.raise_for_status()
+        return r.json().get("data", [])
+
     # ================= 电源 / 控制台 =================
 
     async def power(self, server_id: str, signal: str) -> None:
