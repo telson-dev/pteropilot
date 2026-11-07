@@ -2,7 +2,7 @@
 
 PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什么」，不写时间承诺——每一项都等它在真实使用中被验证、被需要之后才往前挪。
 
-当前版本：**v0.2.7**（见 [CHANGELOG](CHANGELOG.md)）。
+当前版本：**v0.2.17**（见 [CHANGELOG](CHANGELOG.md)）。
 
 ---
 
@@ -11,6 +11,7 @@ PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什
 这些能力已经在 `uvx pteropilot` 里可用，也是后续一切扩展的地基：
 
 - 服务器 / 节点列表：在线状态与资源占用
+- **网络地址**：`get_server_network`（IP/端口分配，主地址 ⭐ 标记、附加端口、备注，优先显示 `ip_alias` 域名）
 - 电源控制：启动 / 停止 / 重启 / 强杀（危险操作带二次确认）；批量电源（`batch_get_status` 状态摘要 + `batch_power` 批量开/停/重启，逐台循环、单台失败不阻断整体）；定时重启（`schedule_restart` 公告 + N 分钟后自动重启，计划随进程存活）
 - **批量备份**：`batch_backup_status`（只读概览：每台备份数量/最近时间）+ `batch_backup`（整体确认后批量建备份，单台失败不阻断）
 - **批量广播**：`broadcast_message`（整体确认后向多台 / 全部服务器控制台广播 `say <message>`，单台失败不阻断）
@@ -20,7 +21,7 @@ PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什
 - 备份：创建 / 列表 / 恢复 / 删除 / 一次性下载链接（`get_backup_download`，配合备份 UUID）
 - **服务器启动配置**：`get_server_startup`（查看启动命令与 egg 启动变量，排查启动失败）
 - **查玩家在线**：`list_players`（当前在线，日志解析）+ `batch_list_players`（并发查看多台服务器当前在线玩家）+ `player_history_stats`（在线历史：上线次数 Top / 最近活动，兼容原版 / Paper / Spigot / Forge / Fabric 中英文格式）
-- **健康度与崩服检测**：`check_server_health`（状态级）+ `diagnose_crash`（日志级崩溃信号：内存不足 / JVM 崩溃 / 进程异常退出 / 致命错误，识别反复崩溃循环）+ `read_server_logs`（直接读游戏日志末尾若干行，配合排查）
+- **健康度与崩服检测**：`check_server_health`（状态级）+ `diagnose_crash`（日志级崩溃信号：内存不足 / JVM 崩溃 / 进程异常退出 / 致命错误，识别反复崩溃循环）+ `read_server_logs`（直接读游戏日志末尾若干行，配合排查）+ `search_server_logs`（日志关键字搜索，快速定位）
 - 安全基线：只读模式开关、危险操作确认、API key 不落第三方
 
 ---
