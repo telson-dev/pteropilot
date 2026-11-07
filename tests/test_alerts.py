@@ -889,3 +889,73 @@ async def test_scan_dry_run_then_real_run_still_notifies(fake, env_panel, monkey
     )
     assert result["notified"] == 1
     assert len(sent) == 1
+
+
+def test_main_json_output(monkeypatch, capsys):
+    async def fake_scan(**kwargs):
+        return {
+            "checked": 2,
+            "abnormal": 1,
+            "notified": 1,
+            "planned": 0,
+            "plans": [],
+            "suppressed": 0,
+            "pending": 0,
+            "errors": ["s3: timeout"],
+        }
+
+    monkeypatch.setattr(alerts, "scan_and_notify", fake_scan)
+    monkeypatch.setattr(
+        sys, "argv", ["pteropilot-alerts", "--webhook", "https://hook.example/send", "--json"]
+    )
+    alerts.main()
+    import json
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["checked"] == 2
+    assert data["notified"] == 1
+    assert data["channels"] == ["webhook"]
+    assert data["dry_run"] is False
+    assert data["errors"] == ["s3: timeout"]
+
+
+def test_main_json_with_dry_run(monkeypatch, capsys):
+    async def fake_scan(**kwargs):
+        return {
+            "checked": 1,
+            "abnormal": 1,
+            "notified": 0,
+            "planned": 1,
+            "plans": [{"server": "s1", "state": "offline", "channels": ["webhook"]}],
+            "suppressed": 0,
+            "pending": 0,
+            "errors": [],
+        }
+
+    monkeypatch.setattr(alerts, "scan_and_notify", fake_scan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pteropilot-alerts", "--webhook", "https://hook.example/send", "--json", "--dry-run"],
+    )
+    alerts.main()
+    import json
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["planned"] == 1
+    assert data["dry_run"] is True
+    assert data["plans"][0]["server"] == "s1"
+
+
+async def test_scan_panel_unreachable_returns_errors(fake, env_panel, monkeypatch):
+    async def spy(webhook, content, token=None):
+        raise AssertionError("面板不可达时不应推送")
+
+    monkeypatch.setattr(alerts, "send_webhook", spy)
+    fake.route("GET", "/api/client", Exception("connection refused"))
+
+    result = await alerts.scan_and_notify("https://hook.example/send", timeout=1)
+    assert result["checked"] == 0
+    assert result["notified"] == 0
+    assert result["errors"], "应把连接失败写进 errors 而不是抛异常"
+    assert "无法获取服务器列表" in result["errors"][0]

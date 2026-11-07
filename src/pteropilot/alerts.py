@@ -235,7 +235,11 @@ async def scan_and_notify(
     errors: list[str] = []
 
     try:
-        servers = await client.client_servers()
+        try:
+            servers = await client.client_servers()
+        except Exception as exc:  # noqa: BLE001 - 面板不可达/密钥错时给出可读错误，而不是崩堆栈
+            errors.append(f"无法获取服务器列表: {type(exc).__name__}: {redact(str(exc))}")
+            servers = []
         for s in servers:
             ident = (s.get("attributes") or {}).get("identifier") or (s.get("attributes") or {}).get("uuid") or "?"
             checked += 1
@@ -374,6 +378,7 @@ def main() -> None:
     parser.add_argument("--confirm-count", type=int, default=int(os.environ.get("CONFIRM_COUNT", "1")), help="连续确认阈值：同一服务器连续 N 次检测异常才推送（默认 1 = 立即推送；设 2+ 防瞬时抖动误报）")
     parser.add_argument("--config", default=None, help="按服务器级别配置路径（默认 ~/.pteropilot/alerts.json，存在即生效）")
     parser.add_argument("--dry-run", action="store_true", help="演练模式：只打印将会通知哪些服务器，不真的推送/发邮件、不写状态文件")
+    parser.add_argument("--json", action="store_true", help="以 JSON 输出结果（机器可读，便于 cron/监控脚本解析）")
     args = parser.parse_args()
 
     if not args.webhook and not (args.smtp_host and args.smtp_user and args.mail_to):
@@ -403,6 +408,13 @@ def main() -> None:
         channels.append("webhook")
     if args.smtp_host and args.smtp_user and args.mail_to:
         channels.append("邮件")
+    if args.json:
+        # 机器可读输出：把渠道信息一起放进去，便于脚本判断
+        payload = dict(result)
+        payload["channels"] = channels
+        payload["dry_run"] = bool(args.dry_run)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
     if args.dry_run:
         print(
             f"演练模式（不实际发送，通道: {'+'.join(channels) or '无'}）：检查 {result['checked']} 台，"

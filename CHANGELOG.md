@@ -5,6 +5,14 @@
 ## [Unreleased]
 
 ### Added
+- `pteropilot-alerts --json` 机器可读输出：把扫描结果（含 `errors`/`channels`/`planned`）以 JSON 打印，便于 cron / 监控脚本解析（可与 `--dry-run` 组合）。
+
+### Fixed
+- `pteropilot-alerts` 面板不可达/密钥错误时不再抛 traceback：改为在 `errors` 里给出可读原因（`redact` 脱敏），退出码正常、`--json` 输出完整。
+
+## [0.2.18] - 2026-11-07
+
+### Added
 - `pteropilot-alerts --dry-run` 演练模式：只打印「将会通知哪些服务器、走哪些渠道」，不实际推送/发邮件、也不写状态文件（不占用冷却/确认计数）——调阈值或首次开 cron 前先跑一遍，确认不会炸群。
 
 ## [0.2.17] - 2026-11-07

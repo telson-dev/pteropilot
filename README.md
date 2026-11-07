@@ -115,7 +115,9 @@ notifying — filters transient flaps; recovery resets the counter),
 `--config <path>` (per-server tuning file; default `~/.pteropilot/alerts.json`),
 `--dry-run` (rehearsal: print which servers *would* be notified and on which
 channels, without sending anything or touching the state file — handy when
-tuning thresholds or before turning cron on).
+tuning thresholds or before turning cron on),
+`--json` (machine-readable output: result with `errors` / `channels` / `planned`
+as JSON, for cron or monitoring scripts).
 
 Email channel (second notifier, can be combined with the webhook):
 
@@ -176,7 +178,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.17** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.18** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 
