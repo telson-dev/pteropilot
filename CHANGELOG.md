@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `list_schedules` 定时任务查看工具（第 40 个）：列出服务器在面板里配置的计划任务——cron 表达式、是否启用、仅在线时执行、上次/下次运行时间、每任务步骤数。只读，回答「自动重启配好了吗」「这个服有哪些定时任务」。
 - `pteropilot-alerts --test` 通道自检：发一条测试消息验证 webhook/邮件配置是否正确（不读服务器、不写状态），失败时列出常见原因并以退出码 1 返回（便于脚本判断）。配置告警时先跑它，别等真崩服才发现没收到。
 - Windows 一键装告警计划任务：`scripts/install_alerts_task.ps1`——一条命令建计划任务（默认每 5 分钟），自动生成包装脚本（面板凭据写进去，后台运行不依赖环境变量；中文日志 UTF-8 正常）、日志落 `~/.pteropilot/alerts.log`，支持 `-Status` / `-Remove` / `-DryRun` / `-Exe` 与邮件通道。解决 README 只有 cron 示例、Windows 服主不会配的问题。
 

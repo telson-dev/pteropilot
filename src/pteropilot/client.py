@@ -239,6 +239,12 @@ class PanelClient:
         r.raise_for_status()
         return r.json().get("data", [])
 
+    async def schedules(self, server_id: str) -> list[dict]:
+        """服务器定时任务（面板内置的计划任务：cron 表达式 + 要执行的指令）。"""
+        r = await self.client.get(f"/servers/{server_id}/schedules")
+        r.raise_for_status()
+        return r.json().get("data", [])
+
     async def activity(self, server_id: str) -> list[dict]:
         """服务器操作审计日志（面板记录的「谁在什么时候做了什么」）。"""
         r = await self.client.get(f"/servers/{server_id}/activity")

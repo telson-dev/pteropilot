@@ -355,6 +355,40 @@ async def list_databases(server_id: str) -> str:
 
 
 @mcp.tool()
+async def list_schedules(server_id: str) -> str:
+    """查看服务器在面板里配置的定时任务（计划任务：cron 表达式 + 执行内容）。
+
+    只读，不创建/不修改/不触发任务。适合回答「自动重启配好了吗」「这个服有哪些
+    定时任务」「下次几点备份」。若想临时安排一次重启，用 schedule_restart。
+    """
+    items = await panel.schedules(server_id)
+    if not items:
+        return "(该服务器没有配置定时任务；可在面板「Schedules」页新建，或用 schedule_restart 临时安排一次重启)"
+    rows: list[str] = []
+    for it in items:
+        a = _attrs(it)
+        name = a.get("name") or "(未命名)"
+        cron = a.get("cron") or {}
+        # 面板把 cron 拆成五段字段
+        cron_txt = " ".join(
+            str(cron.get(k, "*")) for k in ("minute", "hour", "day_of_month", "month", "day_of_week")
+        )
+        only_online = "仅在线时执行" if a.get("only_when_online") else "总是执行"
+        enabled = "启用" if a.get("is_active") else "已停用"
+        last_run = (a.get("last_run_at") or "").split(".")[0].replace("T", " ") or "从未"
+        next_run = (a.get("next_run_at") or "").split(".")[0].replace("T", " ") or "—"
+        # 任务步骤数（每次触发要执行几条指令）
+        rel = a.get("relationships") or {}
+        tasks = (rel.get("tasks") or {}).get("data") if isinstance(rel, dict) else None
+        steps = f"，{len(tasks)} 步" if isinstance(tasks, list) and tasks else ""
+        rows.append(
+            f"- {name} | cron {cron_txt} | {enabled} | {only_online}{steps}\n"
+            f"    上次运行 {last_run} | 下次运行 {next_run}"
+        )
+    return f"共 {len(items)} 个定时任务：\n" + "\n".join(rows)
+
+
+@mcp.tool()
 async def get_server_activity(server_id: str, limit: int = 20) -> str:
     """查看服务器的操作审计日志（谁在什么时候做了什么，只读）。
 

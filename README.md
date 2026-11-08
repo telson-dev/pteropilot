@@ -18,6 +18,7 @@ No panel login, no digging through logs — just ask.
 - 🌐 Network addresses: IP/port allocations with the primary address marked ("what's my server address?")
 - 🗄️ Databases: the panel-assigned database host/db/user for plugins that need MySQL (LuckPerms, CoreProtect…)
 - 📜 Audit log: who restarted / deleted / backed up what, and when (from panel activity events)
+- ⏰ Schedules: panel-configured cron tasks (expression, enabled, last/next run)
 - ⚡ Power controls: start / stop / restart / kill
 - 🖥️ Console: send commands
 - 📁 Files: browse, read, write, upload, rename, delete, create folders, one-time download links
