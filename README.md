@@ -105,7 +105,24 @@ PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
   --webhook "https://oapi.dingtalk.com/robot/send?access_token=xxx" >> /var/log/pteropilot-alerts.log 2>&1
 ```
 
-Options: `--min-level error` (only error state), `--token <key>` (WeCom bots
+Options: **On Windows** (local servers / Windows VPS): no cron needed — install a scheduled task
+with one command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install_alerts_task.ps1 `
+    -Webhook "https://oapi.dingtalk.com/robot/send?access_token=***"
+
+# every 15 min, only error states / e-mail channel / status / uninstall
+... -IntervalMinutes 15 -MinLevel error
+... -SmtpHost smtp.qq.com -SmtpUser you@qq.com -SmtpPass <app password> -MailTo ops@x.com
+... -Status
+... -Remove
+```
+
+It generates a wrapper script (panel credentials written in, so it works in the
+background), logs to `%USERPROFILE%\.pteropilot\alerts.log`, and supports `-DryRun`.
+
+`--min-level error` (only error state), `--token <key>` (WeCom bots
 that need a URL key), `--timeout <sec>`, `--no-log-signals` (state-only, faster),
 `--cooldown <minutes>` (dedupe: same server + same state is not re-notified
 within the cooldown; a state change always alerts immediately — prevents alert
@@ -180,7 +197,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.20** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.21** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

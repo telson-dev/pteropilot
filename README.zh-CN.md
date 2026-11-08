@@ -99,6 +99,27 @@ PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
   --webhook "https://oapi.dingtalk.com/robot/send?access_token=***" >> /var/log/pteropilot-alerts.log 2>&1
 ```
 
+**Windows 用户**（本机开服 / Windows 云主机）：不用手写 cron，一条命令装好计划任务：
+
+```powershell
+# 默认每 5 分钟检查一次，异常推钉钉机器人
+powershell -ExecutionPolicy Bypass -File scripts\install_alerts_task.ps1 `
+    -Webhook "https://oapi.dingtalk.com/robot/send?access_token=***"
+
+# 每 15 分钟、只报 error 态
+... -IntervalMinutes 15 -MinLevel error
+
+# 邮件通道
+... -SmtpHost smtp.qq.com -SmtpUser you@qq.com -SmtpPass <授权码> -MailTo ops@x.com
+
+# 查看状态（上次运行 / 结果 / 日志尾部）与卸载
+... -Status
+... -Remove
+```
+
+脚本会自动生成运行包装脚本（把面板凭据也写进去，后台运行不依赖环境变量）、
+日志落到 `%USERPROFILE%\.pteropilot\alerts.log`，并支持 `-DryRun` 先看效果。
+
 可选参数：`--min-level error`（只报错误态）、`--token ***`（需要 URL key 的企业微信机器人）、`--timeout <秒>`、`--no-log-signals`（只看状态、不读日志，更快）、`--cooldown <分钟>`（去重：同一服务器同一状态在冷却期内不重复通知；状态一变就立即告警——防止 cron 每几分钟跑一次时的告警风暴）、`--state-file <路径>`（冷却/确认状态持久化位置，默认 `~/.pteropilot/alerts_state.json`）、`--confirm-count <n>`（连续 N 次检测到异常才通知——过滤瞬时抖动；恢复健康归零计数）、`--config <路径>`（按服务器调灵敏度的配置文件，默认 `~/.pteropilot/alerts.json`）、`--dry-run`（演练：只打印"将会通知哪些服务器/走哪些渠道"，不真的发送、不写状态文件——调阈值或开 cron 前先跑一遍）。`--json`（机器可读：把结果（含 errors/channels）以 JSON 输出，便于 cron/监控脚本解析）。
 
 邮件通道（第二通知渠道，可与 webhook 同时用）：
@@ -154,7 +175,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.20**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.21**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 
