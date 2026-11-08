@@ -120,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install_alerts_task.ps1 `
 脚本会自动生成运行包装脚本（把面板凭据也写进去，后台运行不依赖环境变量）、
 日志落到 `%USERPROFILE%\.pteropilot\alerts.log`，并支持 `-DryRun` 先看效果。
 
-可选参数：`--min-level error`（只报错误态）、`--token ***`（需要 URL key 的企业微信机器人）、`--timeout <秒>`、`--no-log-signals`（只看状态、不读日志，更快）、`--cooldown <分钟>`（去重：同一服务器同一状态在冷却期内不重复通知；状态一变就立即告警——防止 cron 每几分钟跑一次时的告警风暴）、`--state-file <路径>`（冷却/确认状态持久化位置，默认 `~/.pteropilot/alerts_state.json`）、`--confirm-count <n>`（连续 N 次检测到异常才通知——过滤瞬时抖动；恢复健康归零计数）、`--config <路径>`（按服务器调灵敏度的配置文件，默认 `~/.pteropilot/alerts.json`）、`--dry-run`（演练：只打印"将会通知哪些服务器/走哪些渠道"，不真的发送、不写状态文件——调阈值或开 cron 前先跑一遍）。`--json`（机器可读：把结果（含 errors/channels）以 JSON 输出，便于 cron/监控脚本解析）。
+可选参数：`--min-level error`（只报错误态）、`--token ***`（需要 URL key 的企业微信机器人）、`--timeout <秒>`、`--no-log-signals`（只看状态、不读日志，更快）、`--cooldown <分钟>`（去重：同一服务器同一状态在冷却期内不重复通知；状态一变就立即告警——防止 cron 每几分钟跑一次时的告警风暴）、`--state-file <路径>`（冷却/确认状态持久化位置，默认 `~/.pteropilot/alerts_state.json`）、`--confirm-count <n>`（连续 N 次检测到异常才通知——过滤瞬时抖动；恢复健康归零计数）、`--config <路径>`（按服务器调灵敏度的配置文件，默认 `~/.pteropilot/alerts.json`）、`--dry-run`（演练：只打印"将会通知哪些服务器/走哪些渠道"，不真的发送、不写状态文件——调阈值或开 cron 前先跑一遍）。`--json`（机器可读：把结果（含 errors/channels）以 JSON 输出，便于 cron/监控脚本解析）。`--test`（通道自检：**只验证 webhook/邮件能不能发出去**——发一条测试消息，不读服务器、不写状态；失败会给出常见原因，退出码 1 便于脚本判断。配置告警时先跑这个，别等真崩服才发现没收到）。
 
 邮件通道（第二通知渠道，可与 webhook 同时用）：
 

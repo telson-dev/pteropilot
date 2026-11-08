@@ -357,6 +357,75 @@ async def diagnose_crash_for(server_id: str, client: PanelClient, timeout: float
     return None
 
 
+def _run_channel_test(args: argparse.Namespace) -> int:
+    """发一条测试通知，验证 webhook / 邮件渠道配置是否正确。
+
+    不读服务器数据、不写冷却状态文件——纯配置校验。
+    返回退出码：0 全部成功，1 有渠道失败。
+    """
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    body = (
+        f"PteroPilot 告警通道测试\n"
+        f"时间: {ts}\n"
+        f"收到这条说明通知渠道配置正确，崩服时会正常提醒你。\n"
+        f"（此消息由 pteropilot-alerts --test 发出，不含服务器数据）"
+    )
+    failures = 0
+    results: list[dict] = []
+
+    if args.webhook:
+        try:
+            asyncio.run(send_webhook(args.webhook, body, args.token or None))
+            results.append({"channel": "webhook", "ok": True, "message": "测试消息已发送，请去群里确认收到"})
+        except Exception as exc:  # noqa: BLE001 - 测试模式就是要把原因打出来
+            failures += 1
+            results.append({
+                "channel": "webhook",
+                "ok": False,
+                "error": f"{type(exc).__name__}: {redact(str(exc))}",
+                "hints": "地址复制不全 / 机器人被移出群 / 安全设置要求加签（需 --token）/ 网络不通",
+            })
+
+    if args.smtp_host and args.smtp_user and args.mail_to:
+        try:
+            send_email(
+                to=args.mail_to,
+                subject="PteroPilot 告警通道测试",
+                content=body,
+                host=args.smtp_host,
+                user=args.smtp_user,
+                password=args.smtp_pass,
+                port=args.smtp_port,
+                frm=args.mail_from or None,
+            )
+            results.append({"channel": "邮件", "ok": True, "message": f"已发送到 {args.mail_to}，请查收（也看看垃圾箱）"})
+        except Exception as exc:  # noqa: BLE001
+            failures += 1
+            results.append({
+                "channel": "邮件",
+                "ok": False,
+                "error": f"{type(exc).__name__}: {redact(str(exc))}",
+                "hints": "用了登录密码而非「授权码」/ host 与 port 不匹配（587 用 STARTTLS）/ 邮箱未开启 SMTP 服务",
+            })
+
+    if args.json:
+        print(json.dumps({"test": True, "results": results, "failures": failures}, ensure_ascii=False))
+        return 1 if failures else 0
+
+    for r in results:
+        if r["ok"]:
+            print(f"✅ {r['channel']}：{r['message']}")
+        else:
+            print(f"❌ {r['channel']} 发送失败：{r['error']}")
+            print(f"   常见原因：{r['hints']}")
+
+    if failures:
+        print(f"\n有 {failures} 个渠道失败，配置还没通——修好再开定时任务。")
+        return 1
+    print("\n✅ 渠道配置正常。可以把定时任务开起来了。")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="pteropilot-alerts",
@@ -379,10 +448,17 @@ def main() -> None:
     parser.add_argument("--config", default=None, help="按服务器级别配置路径（默认 ~/.pteropilot/alerts.json，存在即生效）")
     parser.add_argument("--dry-run", action="store_true", help="演练模式：只打印将会通知哪些服务器，不真的推送/发邮件、不写状态文件")
     parser.add_argument("--json", action="store_true", help="以 JSON 输出结果（机器可读，便于 cron/监控脚本解析）")
+    parser.add_argument("--test", action="store_true", help="发一条测试通知验证渠道配置（webhook/邮件是否配对），不读服务器、不写状态")
     args = parser.parse_args()
 
     if not args.webhook and not (args.smtp_host and args.smtp_user and args.mail_to):
         parser.error("至少需要一种通知渠道：--webhook，或完整的 SMTP 邮件配置（--smtp-host/--smtp-user/--smtp-pass/--mail-to）")
+
+    # 测试通知：只验证渠道能不能发出去，不读服务器数据、不动冷却状态。
+    # 配置告警时最常见的卡点就是 webhook 地址/机器人权限/邮箱授权码填错，
+    # 用 --test 可以立刻确认，不必等真的崩服才发现没收到。
+    if args.test:
+        raise SystemExit(_run_channel_test(args))
 
     result = asyncio.run(
         scan_and_notify(

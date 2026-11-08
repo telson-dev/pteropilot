@@ -137,6 +137,9 @@ channels, without sending anything or touching the state file — handy when
 tuning thresholds or before turning cron on),
 `--json` (machine-readable output: result with `errors` / `channels` / `planned`
 as JSON, for cron or monitoring scripts).
+`--test` (channel self-check: sends one test message to verify the webhook /
+e-mail setup — no server data, no state writes; exits 1 with common causes on
+failure). Run it before enabling the schedule.
 
 Email channel (second notifier, can be combined with the webhook):
 
