@@ -17,6 +17,7 @@ PteroPilot 是一个开源 MCP server，让 Claude、Cursor 等 AI 助手直接�
 - 📊 查看服务器列表、在线状态、资源占用
 - 🌐 网络地址：查看服务器 IP/端口分配（主地址标记）——"我的服务器地址是多少"直接问
 - 🗄️ 数据库：查看面板里已分配的数据库主机/库名/用户名（配 LuckPerms 等 MySQL 插件时用）
+- 📜 操作审计：谁在何时重启/删文件/建备份（面板事件日志）
 - ⚡ 电源控制：启动 / 停止 / 重启 / 强杀
 - 🖥️ 控制台：发送指令
 - 📁 文件管理：浏览、读取、写入、上传、重命名、删除、新建文件夹、一次性下载链接
@@ -153,7 +154,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.19**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.20**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 

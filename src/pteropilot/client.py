@@ -239,6 +239,13 @@ class PanelClient:
         r.raise_for_status()
         return r.json().get("data", [])
 
+    async def activity(self, server_id: str) -> list[dict]:
+        """服务器操作审计日志（面板记录的「谁在什么时候做了什么」）。"""
+        r = await self.client.get(f"/servers/{server_id}/activity")
+        r.raise_for_status()
+        # 面板该端点分页返回；这里只用第一页（最近若干条）
+        return r.json().get("data", [])
+
     # ================= 电源 / 控制台 =================
 
     async def power(self, server_id: str, signal: str) -> None:

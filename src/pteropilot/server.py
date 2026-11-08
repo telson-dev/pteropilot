@@ -355,6 +355,44 @@ async def list_databases(server_id: str) -> str:
 
 
 @mcp.tool()
+async def get_server_activity(server_id: str, limit: int = 20) -> str:
+    """查看服务器的操作审计日志（谁在什么时候做了什么，只读）。
+
+    面板记录的服务器事件流：电源操作、文件上传/删除、备份、指令等，都会带上
+    操作者与时间。用来回答「谁重启了我的服务器」「谁删了这个文件」「最近谁动过配置」。
+
+    limit 控制返回条数（1-100，默认 20，取最新的在前）。只读，不改任何设置。
+    """
+    limit = max(1, min(int(limit), 100))
+    events = await panel.activity(server_id)
+    if not events:
+        return "(没有操作记录；面板可能未开启活动日志，或该服务器近期无操作)"
+    rows: list[str] = []
+    for e in events[:limit]:
+        a = _attrs(e)
+        event = a.get("event") or "?"
+        ts_raw = a.get("timestamp") or ""
+        # 面板返回 ISO8601；这里只保留到分钟以便阅读
+        ts = ts_raw.split(".")[0].replace("T", " ") if ts_raw else "?"
+        actor = a.get("actor") or "?"
+        if isinstance(actor, dict):
+            actor = actor.get("username") or actor.get("email") or "?"
+        # is_system=True 表示面板自身/计划任务触发，不是人操作
+        who = f"{actor}（系统）" if a.get("is_system") else str(actor)
+        meta = a.get("metadata")
+        extra = ""
+        if isinstance(meta, dict) and meta:
+            # 只取有意义的短字段，避免刷屏
+            for key in ("name", "file", "directory", "signal"):
+                if meta.get(key):
+                    extra = f" [{meta[key]}]"
+                    break
+        rows.append(f"- {ts} | {who} | {event}{extra}")
+    header = f"共 {len(events)} 条记录，显示最新 {len(rows)} 条："
+    return header + "\n" + "\n".join(rows)
+
+
+@mcp.tool()
 async def check_server_health(server_id: str) -> str:
     """检查服务器健康度：对比 current_state，把异常态翻译成中文结构化提示。
 
