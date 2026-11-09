@@ -21,6 +21,16 @@
 # 产物已备好：dist/pteropilot-0.2.22-py3-none-any.whl + dist/pteropilot-0.2.22.tar.gz
 # 发布后：uvx pteropilot 即装到 v0.2.22，PyPI 描述自动换成新版 README。
 
+### 轨道 A 之后：补 Release 说明（可选但推荐）
+
+`release.yml` 用 `generate_release_notes: true`，发布页描述只有一行 "Full Changelog" 链接。
+执行下面的命令，会把 CHANGELOG 里该版本的章节搬进 Release 描述（含安装指引）：
+
+```bash
+python scripts/release.py            # 先用 API 打 tag（触发构建）
+python scripts/sync_release_notes.py # 构建完成后补说明
+```
+
 ## 两轨关系
 
 - 轨道 A（GitHub Release）= 二进制分发 + 变更记录，走 `git push --tags`，**全自动**。
