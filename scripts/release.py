@@ -70,6 +70,28 @@ def remote_pyproject_version() -> str | None:
     return m.group(1) if m else None
 
 
+def _local_tree_sha() -> str | None:
+    """本地 HEAD 的 tree sha：与远端 HEAD 的 tree sha 比对即可发现任何漏推。"""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD^{tree}"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        )
+        return out.stdout.strip()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _remote_tree_sha() -> str | None:
+    status, ref = api("GET", "/git/ref/heads/main")
+    if status != 200 or not ref:
+        return None
+    status, commit = api("GET", f"/git/commits/{ref['object']['sha']}")
+    if status != 200 or not commit:
+        return None
+    return (commit.get("tree") or {}).get("sha")
+
+
 def git_dirty() -> bool:
     out = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
     return bool(out.stdout.strip())
@@ -103,6 +125,17 @@ def main() -> int:
     # 2) 工作区干净
     if git_dirty():
         sys.exit("❌ 本地工作区有未提交改动，先提交/推送再发版")
+
+    # 2b) 整棵树必须与远端一致——防止「版本号推了、别的文件漏推」导致发布内容不全
+    local_tree = _local_tree_sha()
+    remote_tree = _remote_tree_sha()
+    if local_tree and remote_tree and local_tree != remote_tree:
+        sys.exit(
+            "❌ 本地文件树与远端 main 不一致：有文件还没推上去。\n"
+            f"   本地 tree={local_tree[:12]}\n"
+            f"   远端 tree={remote_tree[:12]}\n"
+            "   先推送（push_repo.py）再发版，否则 tag 指向的代码会缺内容。"
+        )
 
     # 3) tag 是否已存在
     status, _ = api("GET", f"/git/ref/tags/{tag}")
