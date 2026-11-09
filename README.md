@@ -86,6 +86,17 @@ Then just talk to your AI naturally, for example:
 - "When was the latest backup on smp? Create one if missing"
 - "Upload this plugin to the creative server and restart it"
 
+## Check your version first
+
+```bash
+pteropilot --version
+# pteropilot v0.2.22 (40 MCP tools)
+```
+
+**If the tool count looks low you are on an old build.** PyPI may lag behind
+GitHub Releases; install the latest `.whl` from
+[GitHub Releases](https://github.com/telson-dev/pteropilot/releases).
+
 ## Crash alerts (webhook)
 
 The `pteropilot-alerts` command scans your servers read-only and pushes a

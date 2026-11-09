@@ -1233,7 +1233,37 @@ async def delete_backup(server_id: str, backup_id: str, confirm: bool = False) -
     return f"✅ 已删除备份: {backup_id}"
 
 
+def _tool_count() -> int:
+    """已注册的工具数量：用于 --version 输出，让用户一眼看出装的是不是最新版。"""
+    try:
+        manager = getattr(mcp, "_tool_manager", None)
+        tools = getattr(manager, "_tools", None) if manager is not None else None
+        if isinstance(tools, dict) and tools:
+            return len(tools)
+    except Exception:  # noqa: BLE001 - 内部结构变了也不能让 --version 崩
+        pass
+    try:
+        import re
+        from pathlib import Path as _Path
+
+        src = _Path(__file__).read_text(encoding="utf-8")
+        return len(re.findall(r"@mcp\.tool\(\)", src))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _print_version() -> None:
+    count = _tool_count()
+    tail = f"（{count} 个 MCP 工具）" if count else ""
+    print(f"pteropilot v{__version__}{tail}")
+
+
 def main() -> None:
+    # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
+    argv = sys.argv[1:]
+    if "--version" in argv or "-V" in argv or "-v" in argv:
+        _print_version()
+        return
     try:
         config.validate()
     except ValueError as exc:

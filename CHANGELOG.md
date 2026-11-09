@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `pteropilot --version`（也支持 `-V`/`-v`）：打印版本与**当前工具数**，不校验面板配置、不启动 server。用于确认装的是不是最新版（PyPI 可能滞后于 GitHub Release）。
 - 发布自动化 `scripts/release.py`：用 GitHub API 打 tag 触发 `release.yml` 自动构建并发布 Release（绕开被墙的 `git push --tags`）；内置三道检查——远端 pyproject 版本必须与本地一致（防止 tag 打出旧版包）、工作区必须干净、tag 不可重复。
 
 ### Fixed

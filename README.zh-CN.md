@@ -83,6 +83,18 @@ uvx --from git+https://github.com/telson-dev/pteropilot pteropilot
 - 「smp 服最近一次备份是什么时候？没有就现在建一个」
 - 「往 creative 服上传这个插件并重启」
 
+## 装好了先自检版本
+
+```bash
+pteropilot --version
+# 输出：pteropilot v0.2.22（40 个 MCP 工具）
+```
+
+**工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），
+如果 `--version` 显示的工具数明显少于文档里的数量，说明装到了旧版，请从
+[GitHub Releases](https://github.com/telson-dev/pteropilot/releases) 下载最新的
+`.whl` 安装：`pip install pteropilot-<版本>-py3-none-any.whl`。
+
 ## 崩服告警（webhook / 邮件）
 
 `pteropilot-alerts` 命令以只读方式扫描你的服务器，当服务器处于异常态（离线 / 错误 / 挂起）或最近控制台日志出现崩溃信号时，推一条通知到钉钉 / 企业微信机器人 webhook，或发一封邮件。适合配 cron 定时跑：
