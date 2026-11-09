@@ -24,6 +24,32 @@ jobs:
       - name: Run tests with coverage
         run: uv run pytest tests -q -p no:cacheprovider --cov=pteropilot --cov-report=term-missing --cov-fail-under=90
 
+  windows-powershell:
+    # PowerShell 脚本（Windows 告警计划任务安装器）无法在 Linux 上验证，
+    # 这里在真实 Windows 上做语法 + UTF-8 BOM 检查，防止改坏中文后 CI 却全绿。
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PowerShell syntax + BOM check
+        shell: pwsh
+        run: |
+          $fail = $false
+          Get-ChildItem scripts -Filter *.ps1 | ForEach-Object {
+            $path = $_.FullName
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191)
+            if (-not $hasBom) { Write-Host "MISSING UTF-8 BOM: $($_.Name)"; $fail = $true }
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errs) | Out-Null
+            if ($errs.Count -gt 0) {
+              Write-Host "SYNTAX ERRORS in $($_.Name):"
+              $errs | Select-Object -First 5 | ForEach-Object { Write-Host "  L$($_.Extent.StartLineNumber): $($_.Message)" }
+              $fail = $true
+            } else { Write-Host "OK: $($_.Name)" }
+          }
+          if ($fail) { exit 1 }
+          Write-Host "All PowerShell scripts OK"
+
   package:
     runs-on: ubuntu-latest
     steps:
