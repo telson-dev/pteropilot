@@ -536,6 +536,72 @@ async def diagnose_crash(server_id: str, tail: int = 60) -> str:
 
 
 @mcp.tool()
+async def analyze_player_activity(server_id: str, top: int = 10) -> str:
+    """分析最近控制台日志里的玩家加入/退出事件：活跃玩家排行与高峰时段。
+
+    只读。回答「谁最常来」「大概什么时候人多」。数据来源于面板能取到的
+    最近一段日志（时间窗口受面板日志长度限制），**不是完整历史统计**。
+    - top：排行显示人数，1-20，默认 10。
+    """
+    import re
+    from collections import Counter
+
+    from .client import parse_join, parse_leave
+
+    log = await panel.console_log(server_id)
+    lines = log.splitlines()
+    top = max(1, min(int(top), 20))
+
+    joins: Counter[str] = Counter()
+    leaves: Counter[str] = Counter()
+    hours: Counter[int] = Counter()
+    order: list[str] = []
+    # 时间戳形如 [12:34:56] 或 2026-11-09 12:34:56
+    ts_re = re.compile(r"\b(\d{2}):\d{2}:\d{2}\b")
+
+    for line in lines:
+        name = parse_join(line)
+        if name:
+            joins[name] += 1
+            if name not in order:
+                order.append(name)
+            m = ts_re.search(line)
+            if m:
+                hours[int(m.group(1))] += 1
+            continue
+        name = parse_leave(line)
+        if name:
+            leaves[name] += 1
+            if name not in order:
+                order.append(name)
+
+    if not joins and not leaves:
+        return (
+            "最近日志里没有找到玩家加入/退出记录（可能日志被截断、玩家很少、"
+            "或服务器用的不是常见的 MC 日志格式）。"
+        )
+
+    rows = [f"- {name}: 进 {joins[name]} 次 / 退 {leaves[name]} 次" for name in order[:top]]
+    out = [f"最近日志中的玩家活动（共 {len(order)} 个玩家名）", ""]
+    out += rows
+    if len(order) > top:
+        out.append(f"（只显示前 {top} 个，共 {len(order)} 个）")
+
+    if hours:
+        peak = hours.most_common(3)
+        peak_txt = "、".join(f"{h:02d} 点（{n} 次进入）" for h, n in peak)
+        out += ["", f"高峰时段：{peak_txt}"]
+
+    # 只进没退的玩家 = 最近应当还在线（与 list_players 口径一致）
+    still = [n for n in order if joins[n] > leaves[n]]
+    if still:
+        out += ["", f"日志末尾仍在线（进多退少）：{', '.join(still[:top])}"]
+
+    out += ["", "⚠️ 统计窗口＝面板能返回的最近一段日志，不代表完整历史。"]
+    return "\n".join(out)
+
+
+@mcp.tool()
 async def list_players(server_id: str) -> str:
     """查当前在线的玩家：从最近控制台日志解析玩家加入/退出，列出在线名单。
     
