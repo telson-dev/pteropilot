@@ -89,7 +89,7 @@ uvx --from git+https://github.com/telson-dev/pteropilot pteropilot
 
 ```bash
 pteropilot --version
-# 输出：pteropilot v0.2.24（41 个 MCP 工具）
+# 输出：pteropilot v0.2.25（42 个 MCP 工具）
 ```
 
 **工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），
@@ -190,7 +190,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.24**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.25**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 

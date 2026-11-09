@@ -54,6 +54,7 @@
 | `list_databases` | `databases()` | GET | `/api/client/servers/{server}/databases` | 返回 `data[]`，每项含 `attributes` 里的主机地址/库名/用户名/来源限制；只读，密码不在客户端 API 返回范围内（工具提示去面板查看） | Pelican 源码 |
 | `get_server_activity` | `activity()` | GET | `/api/client/servers/{server}/activity` | 返回 `data[]`，每项含 `event`/`timestamp`/`actor`/`is_system`/`metadata`；只读取第一页最近若干条（默认 20、上限 100），输出时间截取到分钟、`is_system` 标注「（系统）」、metadata 只取 name/file/directory/signal 短字段 | Pelican 源码 |
 | `list_schedules` | `schedules()` | GET | `/api/client/servers/{server}/schedules` | 返回 `data[]`，每项含 `attributes` 里的 `name`/`cron`（拆成 minute/hour/day_of_month/month/day_of_week 五段）/`is_active`/`is_processing`/`only_when_online`/`last_run_at`/`next_run_at`；只读，输出拼接 cron 表达式与上次/下次运行时间、每任务步骤数 | Pelican 源码 |
+| `list_server_users` | `server_users()` | GET | `/api/client/servers/{server}/users` | 返回 `data[]`，每项 `attributes` 含 `email`/`username`/`server_permissions`（`[{permission: "control.restart"}]` 形态）；工具层输出邮箱/用户名 + 权限项数与大类，只读 | Pelican 源码 |
 
 ### 用户侧（Client API）—— 文件管理
 
