@@ -18,8 +18,8 @@
 # 2) 设置令牌后执行：
 #    $env:UV_PUBLISH_TOKEN="pypi-..."   （PowerShell）
 #    uv publish
-# 产物已备好：dist/pteropilot-0.2.23-py3-none-any.whl + dist/pteropilot-0.2.23.tar.gz
-# 发布后：uvx pteropilot 即装到 v0.2.23，PyPI 描述自动换成新版 README。
+# 产物已备好：dist/pteropilot-0.2.24-py3-none-any.whl + dist/pteropilot-0.2.24.tar.gz
+# 发布后：uvx pteropilot 即装到 v0.2.24，PyPI 描述自动换成新版 README。
 
 ### 轨道 A 之后：补 Release 说明（可选但推荐）
 

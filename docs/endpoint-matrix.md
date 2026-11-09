@@ -89,6 +89,7 @@
 | `list_players` | `GET .../console` | 解析控制台日志中的玩家加入/退出行（非权威，受日志 ~1000 行截断影响） |
 | `batch_list_players` | `GET .../console`（逐台并发） | 并发查看多台服务器当前在线玩家（复用 `list_players`，asyncio 并发、结果保序、单台失败不阻断） |
 | `player_history_stats` | `GET .../console` | 解析控制台日志统计玩家在线历史（当前在线推断、上线次数 Top、最近加入/离开；同样受日志 ~1000 行截断影响） |
+| `analyze_player_activity` | `GET .../console` | 解析最近控制台日志的加入/退出事件做玩家活跃分析（活跃排行、高峰时段、日志末尾仍在线；统计窗口受日志 ~1000 行截断限制，非权威） |
 | `read_server_logs` | `GET .../files/contents` | 读取游戏服务器日志文件末尾若干行（默认 `logs/latest.log`），复用文件读取端点（见文件表 `read_file` 行） |
 | `search_server_logs` | `GET .../files/contents` | 在服务器日志中搜索关键字（不区分大小写、带绝对行号，只检索末尾 5000 行、limit 上限 200），复用文件读取端点（见文件表 `read_file` 行） |
 | `check_server_health` | `GET .../resources` | 对 `current_state` 做分类（healthy/transitional/abnormal/unknown） |

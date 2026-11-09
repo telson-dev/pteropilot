@@ -2,7 +2,7 @@
 
 PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什么」，不写时间承诺——每一项都等它在真实使用中被验证、被需要之后才往前挪。
 
-当前版本：**v0.2.23**（见 [CHANGELOG](CHANGELOG.md)）。
+当前版本：**v0.2.24**（见 [CHANGELOG](CHANGELOG.md)）。
 
 ---
 
@@ -22,7 +22,7 @@ PteroPilot 的功能路线图。这里只记「接下来做什么」和「为什
 - **服务器启动配置**：`get_server_startup`（查看启动命令与 egg 启动变量，排查启动失败）
 - **数据库查看**：`list_databases`（查看服务器已分配的 MySQL 数据库——主机/库名/用户名/来源限制，密码不在 API 范围内）
 - **操作审计日志**：`get_server_activity`（查看服务器事件流——谁在什么时候做了什么（电源/文件/备份/指令），面板自身或计划任务触发的事件标注「（系统）」；回答「谁重启了我的服务器」「谁删了这个文件」）
-- **查玩家在线**：`list_players`（当前在线，日志解析）+ `batch_list_players`（并发查看多台服务器当前在线玩家）+ `player_history_stats`（在线历史：上线次数 Top / 最近活动，兼容原版 / Paper / Spigot / Forge / Fabric 中英文格式）
+- **查玩家在线**：`list_players`（当前在线，日志解析）+ `batch_list_players`（并发查看多台服务器当前在线玩家）+ `player_history_stats`（在线历史：上线次数 Top / 最近活动，兼容原版 / Paper / Spigot / Forge / Fabric 中英文格式）+ `analyze_player_activity`（玩家活跃分析：活跃排行 / 高峰时段 / 日志末尾仍在线）
 - **健康度与崩服检测**：`check_server_health`（状态级）+ `diagnose_crash`（日志级崩溃信号：内存不足 / JVM 崩溃 / 进程异常退出 / 致命错误，识别反复崩溃循环）+ `read_server_logs`（直接读游戏日志末尾若干行，配合排查）+ `search_server_logs`（日志关键字搜索，快速定位）
 - 安全基线：只读模式开关、危险操作确认、API key 不落第三方
 
