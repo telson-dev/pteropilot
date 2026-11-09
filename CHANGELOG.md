@@ -2,6 +2,12 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+- `analyze_player_activity` 玩家活跃分析工具（第 41 个）：分析最近控制台日志里的加入/退出事件——活跃玩家排行（进/退次数）、高峰时段、日志末尾仍在线的人。只读，回答「谁最常来」「什么时候人多」；`top` 1-20 默认 10，并明确标注统计窗口受日志长度限制。
+- `scripts/release.py` 整棵树一致性检查：本地 HEAD tree 必须等于远端 main tree，任何漏推文件都会在打 tag 前被拦下。
+
 ## [0.2.23] - 2026-11-09
 
 ### Added
