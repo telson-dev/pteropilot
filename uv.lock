@@ -472,7 +472,7 @@ wheels = [
 
 [[package]]
 name = "pteropilot"
-version = "0.2.7"
+version = "0.2.22"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

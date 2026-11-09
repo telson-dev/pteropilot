@@ -51,7 +51,7 @@ and backups (create/list/restore/delete).
 
 **Features:**
 - Dual-panel: supports both Pterodactyl and Pelican (same origin API)
-- 34 MCP tools covering servers, power, console, files, backups, broadcast, health & crash diagnosis, logs & player history, scheduled restart, startup config, backup download, multi-server console logs, multi-server player roster
+- 40 MCP tools covering servers, power, console, files, backups, broadcast, health & crash diagnosis, logs & player history, scheduled restart, startup config, backup download, multi-server console logs, multi-server player roster, connection diagnosis, scheduled tasks
 - Safety: PANEL_READONLY=1 read-only mode + confirm=True for dangerous ops
 - Your API key never leaves your machine
 - Python 3.12+, install in one line via uvx

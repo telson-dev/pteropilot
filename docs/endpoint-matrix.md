@@ -50,6 +50,10 @@
 | `get_console_log` | `console_log()` | GET | `/api/client/servers/{server}/console` | 返回**纯文本**（非 JSON） | Pelican 源码 |
 | `send_command` | `send_command()` | POST | `/api/client/servers/{server}/command` | body `{"command": "..."}` | Pelican 源码 |
 | `get_server_startup` | `get_startup()` | GET | `/api/client/servers/{server}/startup` | 返回 `{ attributes: { startup, docker_image, ... } }`（egg 启动命令与变量） | Pelican 源码 |
+| `get_server_network` | `network_allocations()` | GET | `/api/client/servers/{server}/network/allocations` | 返回 `data[]`，每项含 `ip`/`port`/`ip_alias`/「是否主分配」；输出主地址加 ⭐ 标记、列附加端口与备注，优先显示 `ip_alias` 域名（MC 服主查“服务器地址是多少”） | Pelican 源码 |
+| `list_databases` | `databases()` | GET | `/api/client/servers/{server}/databases` | 返回 `data[]`，每项含 `attributes` 里的主机地址/库名/用户名/来源限制；只读，密码不在客户端 API 返回范围内（工具提示去面板查看） | Pelican 源码 |
+| `get_server_activity` | `activity()` | GET | `/api/client/servers/{server}/activity` | 返回 `data[]`，每项含 `event`/`timestamp`/`actor`/`is_system`/`metadata`；只读取第一页最近若干条（默认 20、上限 100），输出时间截取到分钟、`is_system` 标注「（系统）」、metadata 只取 name/file/directory/signal 短字段 | Pelican 源码 |
+| `list_schedules` | `schedules()` | GET | `/api/client/servers/{server}/schedules` | 返回 `data[]`，每项含 `attributes` 里的 `name`/`cron`（拆成 minute/hour/day_of_month/month/day_of_week 五段）/`is_active`/`is_processing`/`only_when_online`/`last_run_at`/`next_run_at`；只读，输出拼接 cron 表达式与上次/下次运行时间、每任务步骤数 | Pelican 源码 |
 
 ### 用户侧（Client API）—— 文件管理
 
@@ -74,7 +78,7 @@
 | `restore_backup` | `restore_backup()` | POST | `/api/client/servers/{server}/backups/{backup}/restore` | 无 body | Pelican 源码 |
 | `delete_backup` | `delete_backup()` | DELETE | `/api/client/servers/{server}/backups/{backup}` | 无 body | Pelican 源码 |
 | `batch_backup` | `create_backup()`（逐台循环） | POST | `/api/client/servers/{server}/backups` × N | 无原生批量端点，客户端循环调用单台 `create_backup()`；整体 confirm 门禁在工具层 | Pelican 源码 |
-| `batch_backup_status` | `list_backups()`（逐台循环） | GET | `/api/client/servers/{server}/backups` × N | 无原生批量端点，客户端循环调用单台 `list_backups()` 汇总备份数量/最近时间 | Pelican 源码 |
+| `batch_backup_status` | `list_backups()`（逐台循环） | GET | `/api/client/servers/{server}/backups` × N | 无原生批量端点，客户端循环调用单台 `list_backups()` 汇总备份数量/最近时间；输出另含每台备份总大小（经 `_fmt_size` 人类可读） | Pelican 源码 |
 
 ### 只读诊断 / 派生工具（无独立新端点，复用 resources / console）
 
@@ -86,11 +90,13 @@
 | `batch_list_players` | `GET .../console`（逐台并发） | 并发查看多台服务器当前在线玩家（复用 `list_players`，asyncio 并发、结果保序、单台失败不阻断） |
 | `player_history_stats` | `GET .../console` | 解析控制台日志统计玩家在线历史（当前在线推断、上线次数 Top、最近加入/离开；同样受日志 ~1000 行截断影响） |
 | `read_server_logs` | `GET .../files/contents` | 读取游戏服务器日志文件末尾若干行（默认 `logs/latest.log`），复用文件读取端点（见文件表 `read_file` 行） |
+| `search_server_logs` | `GET .../files/contents` | 在服务器日志中搜索关键字（不区分大小写、带绝对行号，只检索末尾 5000 行、limit 上限 200），复用文件读取端点（见文件表 `read_file` 行） |
 | `check_server_health` | `GET .../resources` | 对 `current_state` 做分类（healthy/transitional/abnormal/unknown） |
+| `check_panel_connection` | `GET /api/client`（复用 `client_servers()`，见状态表 `list_my_servers` 行） | 诊断 PANEL_URL / API Key 可达性，按 401/403/404 给可操作提示（无独立新端点） |
 | `diagnose_crash` | `GET .../resources` + `GET .../console` | 结合状态 + 日志扫描崩溃信号关键词 |
 | `batch_get_status` | `GET .../resources`（逐台循环） | 聚合多台的 `resources` 摘要与 `check_server_health` 健康度 |
 | `batch_get_console_log` | `GET .../console`（逐台并发） | 并发读取多台服务器控制台最近日志（复用 `get_console_log`，asyncio 并发、结果保序、单台失败不阻断） |
-| `batch_backup_status` | `GET .../backups`（逐台循环） | 聚合多台的 `list_backups` 结果（见备份表同一行） |
+| `batch_backup_status` | `GET .../backups`（逐台循环） | 聚合多台的 `list_backups` 结果（见备份表同一行；输出含每台备份总大小人类可读） |
 | `broadcast_message` | `POST .../command`（逐台循环） | 复用 `send_command` 向多台/全部服务器广播 `say <message>`，无独立批量端点；整体 confirm 门禁在工具层 |
 | `schedule_restart` | `POST .../command` + `POST .../power`（延时） | 先 `send_command` 广播倒计时公告，N 分钟后调用 `power(restart)`；无独立定时端点，计划随 MCP 进程存活 |
 
