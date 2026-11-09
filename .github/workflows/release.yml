@@ -29,5 +29,9 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          # 只传分发产物：uv build 会在 dist/ 里写一个 .gitignore，
+          # 用 dist/* 会把它当附件传到 Release（用户下载列表里多出无用文件）。
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
           generate_release_notes: true
