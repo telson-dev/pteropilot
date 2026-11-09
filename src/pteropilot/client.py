@@ -239,6 +239,12 @@ class PanelClient:
         r.raise_for_status()
         return r.json().get("data", [])
 
+    async def server_users(self, server_id: str) -> list[dict]:
+        """服务器的子用户列表（客户端 API：/servers/{id}/users），含邮箱与权限。"""
+        r = await self.client.get(f"/servers/{server_id}/users")
+        r.raise_for_status()
+        return r.json().get("data", [])
+
     async def schedules(self, server_id: str) -> list[dict]:
         """服务器定时任务（面板内置的计划任务：cron 表达式 + 要执行的指令）。"""
         r = await self.client.get(f"/servers/{server_id}/schedules")

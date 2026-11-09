@@ -536,6 +536,39 @@ async def diagnose_crash(server_id: str, tail: int = 60) -> str:
 
 
 @mcp.tool()
+async def list_server_users(server_id: str) -> str:
+    """查看能管理这台服务器的子用户（邮箱 + 权限数量），确认「谁能动我的服」。
+
+    只读。返回面板为该服务器分配的 subuser 列表；子用户由面板管理员在
+    「Users」页添加，权限（如能否重启、能否改文件）决定他们能做什么。
+    """
+    users = await panel.server_users(server_id)
+    if not users:
+        return "(该服务器没有添加子用户：只有面板账号本人能管理；如需要他人协助，可在面板「Users」页添加并勾选权限)"
+
+    rows: list[str] = []
+    for u in users:
+        a = _attrs(u)
+        email = a.get("email") or a.get("username") or "?"
+        name = a.get("username") or ""
+        perms = a.get("server_permissions") or []
+        # server_permissions 通常是 [{permission: "control.restart"}, ...]
+        keys: list[str] = []
+        for item in perms:
+            if isinstance(item, dict):
+                p = item.get("permission") or ""
+            else:
+                p = str(item)
+            if p:
+                keys.append(p.split(".")[0])
+        uniq = sorted(set(keys))
+        perm_txt = f"{len(perms)} 项（涉及 {'/'.join(uniq)}）" if perms else "无权限记录"
+        label = f"{email}" + (f"（{name}）" if name and name != email else "")
+        rows.append(f"- {label} | 权限 {perm_txt}")
+    return f"共 {len(users)} 个子用户：\n" + "\n".join(rows)
+
+
+@mcp.tool()
 async def analyze_player_activity(server_id: str, top: int = 10) -> str:
     """分析最近控制台日志里的玩家加入/退出事件：活跃玩家排行与高峰时段。
 
