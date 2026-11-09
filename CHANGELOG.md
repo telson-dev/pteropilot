@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added
+- 发布自动化 `scripts/release.py`：用 GitHub API 打 tag 触发 `release.yml` 自动构建并发布 Release（绕开被墙的 `git push --tags`）；内置三道检查——远端 pyproject 版本必须与本地一致（防止 tag 打出旧版包）、工作区必须干净、tag 不可重复。
+
+### Fixed
+- `release.yml` 只上传 wheel 与 sdist：原来用 `dist/*` 会把 `uv build` 生成的 `.gitignore` 当成附件传到 Release。
+- 修复 v0.2.22 Release 错版：远端 pyproject 版本曾停留在 0.2.7，导致 tag 指向的代码构建出旧版本包。
+
 ## [0.2.22] - 2026-11-09
 
 ### Added
