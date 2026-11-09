@@ -2,7 +2,7 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.2.23] - 2026-11-09
 
 ### Added
 - `scripts/sync_release_notes.py`：把 CHANGELOG 对应版本章节搬进 GitHub Release 描述（含安装指引与变更历史链接）——自动生成的 release notes 只有一行链接，用户看不出改了什么。
