@@ -64,7 +64,7 @@ Add this to your MCP client config (Claude Desktop, Cursor, etc.):
       "command": "uvx",
       "args": ["pteropilot"],
       "env": {
-        "PANEL_URL": "https://panel.example.com",
+        "PANEL_URL": "https://panel.example.com",   # panel root URL, no /api suffix
         "PANEL_API_KEY": "ptlc_xxxxxxxxxxxxxxxxxxxx",
         "PANEL_READONLY": "0"
       }

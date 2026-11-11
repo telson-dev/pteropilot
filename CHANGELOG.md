@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **面板地址自动规范化**：`PANEL_URL` 填成 `https://panel.example.com/api`（面板文档常见写法）时，原来会拼出 `/api/api/client` → 404，看着像密钥错；现在自动剥掉 `/api`、`/api/client`、`/api/application` 后缀与尾斜杠，真实子路径（如 `/pterodactyl`）保持不变。
+
 ## [0.2.25] - 2026-11-10
 
 ### Added

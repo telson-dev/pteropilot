@@ -10,11 +10,34 @@ CLIENT_KEY_PREFIXES = ("ptlc_", "pacc_")
 APP_KEY_PREFIXES = ("ptla_", "papp_")
 
 
+# 用户常把面板文档里的 API 路径一起复制过来（如 https://panel.example.com/api），
+# 直接拼会变成 /api/api/client 导致 404；这里统一剥掉。
+_API_SUFFIXES = ("/api/application", "/api/client", "/api")
+
+
+def normalize_panel_url(url: str) -> str:
+    """把面板地址规范成根地址：去空白、去尾斜杠、剥掉 /api 之类的后缀。"""
+    u = (url or "").strip()
+    if not u:
+        return ""
+    while u.endswith("/"):
+        u = u[:-1]
+    lowered = u.lower()
+    for suffix in _API_SUFFIXES:
+        if lowered.endswith(suffix):
+            u = u[: -len(suffix)]
+            lowered = u.lower()
+            while u.endswith("/"):
+                u = u[:-1]
+            break
+    return u
+
+
 @dataclass
 class Config:
     """PteroPilot 运行配置。"""
 
-    panel_url: str = field(default_factory=lambda: os.environ.get("PANEL_URL", ""))
+    panel_url: str = field(default_factory=lambda: normalize_panel_url(os.environ.get("PANEL_URL", "")))
     panel_api_key: str = field(
         default_factory=lambda: os.environ.get("PANEL_API_KEY", ""), repr=False
     )

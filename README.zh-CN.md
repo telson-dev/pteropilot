@@ -64,7 +64,7 @@ uvx --from git+https://github.com/telson-dev/pteropilot pteropilot
       "command": "uvx",
       "args": ["pteropilot"],
       "env": {
-        "PANEL_URL": "https://panel.example.com",
+        "PANEL_URL": "https://panel.example.com",   // 面板根地址，别带 /api
         "PANEL_API_KEY": "ptlc_xxxxxxxxxxxxxxxxxxxx",
         "PANEL_READONLY": "0"
       }
