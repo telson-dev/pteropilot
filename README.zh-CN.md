@@ -47,11 +47,25 @@ uvx --refresh pteropilot      # 或 uvx pteropilot@latest
 pip install -U pteropilot     # pip 安装方式
 ```
 
-**PyPI 版本可能滞后于 GitHub**（发布排队时）。要装到最新开发版，直接从仓库安装：
+**PyPI 版本可能滞后于 GitHub**（发布排队时）。装完先自检：
 
 ```bash
-uvx --from git+https://github.com/telson-dev/pteropilot pteropilot
+pteropilot --version     # 工具数少于 README 里的数量 = 装到了旧版
 ```
+
+国内装包慢或超时，用镜像：
+
+```bash
+pip install pteropilot -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+要装到最新版（PyPI 还没同步时），从 [GitHub Releases](https://github.com/telson-dev/pteropilot/releases) 下载 `.whl` 后本地安装：
+
+```bash
+pip install pteropilot-<版本>-py3-none-any.whl
+```
+
+> 注：GitHub 在国内访问可能不稳定，本项目不提供任何代理方案；若下载困难，优先等 PyPI 同步或用镜像装。
 
 ## 配置
 

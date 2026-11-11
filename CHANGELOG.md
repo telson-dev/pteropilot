@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+- `pteropilot --version` 在工具数明显偏少（<30）时额外提示「可能装到了旧版本（PyPI 发布可能滞后）」，避免用户以为功能缺失
+- README 安装章节：补国内 PyPI 镜像（清华源）命令与 `--version` 自检方法；把国内常不可用的 git+GitHub 安装方式换成 GitHub Release 下载 `.whl`，并明确说明本项目不提供代理方案
+
 ### Fixed
 - **面板地址自动规范化**：`PANEL_URL` 填成 `https://panel.example.com/api`（面板文档常见写法）时，原来会拼出 `/api/api/client` → 404，看着像密钥错；现在自动剥掉 `/api`、`/api/client`、`/api/application` 后缀与尾斜杠，真实子路径（如 `/pterodactyl`）保持不变。
 

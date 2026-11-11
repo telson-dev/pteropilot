@@ -47,10 +47,17 @@ uvx --refresh pteropilot      # or: uvx pteropilot@latest
 pip install -U pteropilot     # if you installed via pip
 ```
 
-**PyPI can lag behind GitHub** while a release is pending. For the freshest build, install straight from the repo:
+**PyPI can lag behind GitHub** while a release is pending. Check what you got:
 
 ```bash
-uvx --from git+https://github.com/telson-dev/pteropilot pteropilot
+pteropilot --version     # fewer tools than the README lists = old build
+```
+
+If PyPI is not updated yet, install the `.whl` from
+[GitHub Releases](https://github.com/telson-dev/pteropilot/releases):
+
+```bash
+pip install pteropilot-<version>-py3-none-any.whl
 ```
 
 ## Configure

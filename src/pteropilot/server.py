@@ -1355,6 +1355,12 @@ def _print_version() -> None:
     count = _tool_count()
     tail = f"（{count} 个 MCP 工具）" if count else ""
     print(f"pteropilot v{__version__}{tail}")
+    if count and count < 30:
+        print(
+            "提示：工具数偏少，你可能装到了旧版本（PyPI 发布可能滞后）。"
+            "请对照 README 里的工具清单，或从 GitHub Releases 安装最新的 .whl。",
+            file=sys.stderr,
+        )
 
 
 def main() -> None:

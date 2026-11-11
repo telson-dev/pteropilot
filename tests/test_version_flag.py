@@ -44,3 +44,26 @@ def test_version_reports_expected_tool_count(monkeypatch, capsys):
 def test_tool_count_matches_registered_tools():
     """--version 显示的工具数必须与真实注册数一致（不能是写死的常量）。"""
     assert server_mod._tool_count() == len(server_mod.mcp._tool_manager._tools)
+
+
+def test_version_warns_when_tool_count_looks_old(monkeypatch, capsys):
+    """工具数明显偏少时应提示可能装了旧版（PyPI 可能滞后）。"""
+    monkeypatch.setattr(server_mod, "_tool_count", lambda: 5)
+    monkeypatch.setattr("sys.argv", ["pteropilot", "--version"])
+    monkeypatch.delenv("PANEL_URL", raising=False)
+    monkeypatch.delenv("PANEL_API_KEY", raising=False)
+    server_mod.main()
+    out, err = capsys.readouterr()
+    assert "pteropilot v" in out
+    assert "5 个 MCP 工具" in out
+    assert "旧版本" in err
+
+
+def test_version_no_warning_when_count_normal(monkeypatch, capsys):
+    monkeypatch.setattr(server_mod, "_tool_count", lambda: 40)
+    monkeypatch.setattr("sys.argv", ["pteropilot", "--version"])
+    monkeypatch.delenv("PANEL_URL", raising=False)
+    monkeypatch.delenv("PANEL_API_KEY", raising=False)
+    server_mod.main()
+    out, err = capsys.readouterr()
+    assert "旧版本" not in err
