@@ -228,6 +228,8 @@ async def scan_and_notify(
     checked = 0
     abnormal = 0
     notified = 0
+    send_failed = 0
+    send_errors: list[str] = []
     planned = 0
     plans: list[dict] = []
     suppressed = 0
@@ -302,20 +304,41 @@ async def scan_and_notify(
                         )
                         planned += 1
                         continue
+                    # 推送失败必须与「查询失败」区分：前者意味着**告警没发出去**，
+                    # 用户以为有监控、实际没人知道服务器挂了——这是最危险的静默失败。
+                    sent_any = False
                     if wh_url:
-                        await send_webhook(wh_url, message)
+                        try:
+                            await send_webhook(wh_url, message)
+                            sent_any = True
+                        except Exception as exc:  # noqa: BLE001
+                            send_failed += 1
+                            send_errors.append(
+                                f"{ident}（webhook）: {type(exc).__name__}: {redact(str(exc))}"
+                            )
                     if mail_to:
-                        await send_email(
-                            to=mail_to,
-                            subject=f"PteroPilot 告警：服务器 {ident} 状态异常（{state_now}）",
-                            content=message,
-                            host=smtp_host,
-                            user=smtp_user,
-                            password=smtp_password,
-                            port=smtp_port,
-                            frm=smtp_from or None,
-                        )
-                    notified += 1
+                        try:
+                            await send_email(
+                                to=mail_to,
+                                subject=f"PteroPilot 告警：服务器 {ident} 状态异常（{state_now}）",
+                                content=message,
+                                host=smtp_host,
+                                user=smtp_user,
+                                password=smtp_password,
+                                port=smtp_port,
+                                frm=smtp_from or None,
+                            )
+                            sent_any = True
+                        except Exception as exc:  # noqa: BLE001
+                            send_failed += 1
+                            send_errors.append(
+                                f"{ident}（邮件）: {type(exc).__name__}: {redact(str(exc))}"
+                            )
+                    if sent_any:
+                        notified += 1
+                    else:
+                        # 一条都没发出去 → 不推进状态，下一次扫描会重试
+                        continue
                 if state is not None:
                     state[ident] = {"state": state_now, "hits": hits, "ts": time.time()}
             except Exception as exc:  # noqa: BLE001 - 单台失败不阻断整体
@@ -336,6 +359,8 @@ async def scan_and_notify(
         "suppressed": suppressed,
         "pending": pending,
         "errors": errors,
+        "send_failed": send_failed,
+        "send_errors": send_errors,
     }
 
 
@@ -549,6 +574,16 @@ def main() -> None:
         )
     for e in result["errors"]:
         print(f"  查询失败: {e}")
+    # 推送失败单独醒目输出：这代表「告警没发出去」，不是查询问题。
+    if result.get("send_failed"):
+        print()
+        print(f"⚠️ 推送失败 {result['send_failed']} 次——告警没能送达！")
+        print("   注意：这种情况下你可能以为有监控，实际服务器挂了却没人收到通知。")
+        for e in result.get("send_errors", []):
+            print(f"   {e}")
+        print("   排查：webhook 地址/机器人权限/加签设置/网络；邮件看 SMTP 授权码与端口。")
+        print("   可先用 `pteropilot-alerts --test` 单独验证渠道。")
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

@@ -132,6 +132,8 @@ pteropilot-alerts --webhook "..." --test
 
 # 卡在冷却期 / 调完灵敏度想重新计数：清空状态
 pteropilot-alerts --reset
+
+# 退出码：0=正常；1=参数/配置错误；3=有告警但推送失败（告警没送达，需排查渠道）
 ```
 
 **Windows 用户**（本机开服 / Windows 云主机）：不用手写 cron，一条命令装好计划任务：

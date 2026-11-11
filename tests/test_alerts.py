@@ -149,6 +149,8 @@ async def test_scan_no_servers(fake, env_panel, monkeypatch):
         "suppressed": 0,
         "pending": 0,
         "errors": [],
+        "send_failed": 0,
+        "send_errors": [],
     }
 
 
@@ -655,8 +657,10 @@ async def test_scan_webhook_push_failure_recorded(fake, env_panel, monkeypatch):
     result = await alerts.scan_and_notify("https://hook.example/send")
     assert result["abnormal"] == 1
     assert result["notified"] == 0
-    assert len(result["errors"]) == 1
-    assert "s1" in result["errors"][0]
+    # 推送失败单独归类（不再混在查询 errors 里）
+    assert result["send_failed"] == 1
+    assert len(result["send_errors"]) == 1
+    assert "s1" in result["send_errors"][0]
 
 
 def test_send_email_connection_failure(monkeypatch):
@@ -771,7 +775,7 @@ def test_redact_strips_bearer_and_api_key_still():
 
 
 async def test_webhook_push_failure_does_not_leak_signed_url(fake, env_panel, monkeypatch):
-    """webhook 推送失败时，errors 里不能带出 access_token 签名。"""
+    """webhook 推送失败时，send_errors 里不能带出 access_token 签名。"""
     signed_url = "https://oapi.dingtalk.com/robot/send?access_token=LEAK_ME_TOKEN"
 
     async def failing_webhook(url, content, token=None):
@@ -788,12 +792,13 @@ async def test_webhook_push_failure_does_not_leak_signed_url(fake, env_panel, mo
     fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
 
     result = await alerts.scan_and_notify(signed_url)
-    assert len(result["errors"]) == 1
-    assert "LEAK_ME_TOKEN" not in result["errors"][0]
+    assert result["send_failed"] == 1
+    assert len(result["send_errors"]) == 1
+    assert "LEAK_ME_TOKEN" not in result["send_errors"][0]
 
 
 async def test_webhook_push_failure_does_not_leak_key_token(fake, env_panel, monkeypatch):
-    """企业微信 key 签名同样不能从 errors 漏出。"""
+    """企业微信 key 签名同样不能从 send_errors 漏出。"""
     signed_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=LEAK_ME_KEY"
 
     async def failing_webhook(url, content, token=None):
@@ -809,8 +814,9 @@ async def test_webhook_push_failure_does_not_leak_key_token(fake, env_panel, mon
     fake.route("GET", "/api/client", _servers_payload([_server("s1")]))
 
     result = await alerts.scan_and_notify(signed_url)
-    assert len(result["errors"]) == 1
-    assert "LEAK_ME_KEY" not in result["errors"][0]
+    assert result["send_failed"] == 1
+    assert len(result["send_errors"]) == 1
+    assert "LEAK_ME_KEY" not in result["send_errors"][0]
 
 
 async def test_smtp_auth_failure_does_not_leak_password(fake, env_panel, monkeypatch):
@@ -831,8 +837,9 @@ async def test_smtp_auth_failure_does_not_leak_password(fake, env_panel, monkeyp
         webhook="",
         smtp_host="smtp.example.com", smtp_user="u", smtp_password=secret_pw, smtp_to="ops@x.com",
     )
-    assert len(result["errors"]) == 1
-    assert secret_pw not in result["errors"][0]
+    assert result["send_failed"] == 1
+    assert len(result["send_errors"]) == 1
+    assert secret_pw not in result["send_errors"][0]
 
 
 def test_alerts_state_file_contains_no_credentials(tmp_path):

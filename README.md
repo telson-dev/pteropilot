@@ -130,6 +130,8 @@ pteropilot-alerts --webhook "..." --test
 
 # stuck in cooldown / changed sensitivity: clear state and start over
 pteropilot-alerts --reset
+
+# exit codes: 0=ok; 1=config error; 3=alert fired but delivery failed (nobody was notified)
 ```
 
 Options: **On Windows** (local servers / Windows VPS): no cron needed — install a scheduled task
