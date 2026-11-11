@@ -239,6 +239,12 @@ class PanelClient:
         r.raise_for_status()
         return r.json().get("data", [])
 
+    async def server_mounts(self, server_id: str) -> list[dict]:
+        """服务器的挂载点列表（客户端 API：/servers/{id}/mounts）。"""
+        r = await self.client.get(f"/servers/{server_id}/mounts")
+        r.raise_for_status()
+        return r.json().get("data", [])
+
     async def server_users(self, server_id: str) -> list[dict]:
         """服务器的子用户列表（客户端 API：/servers/{id}/users），含邮箱与权限。"""
         r = await self.client.get(f"/servers/{server_id}/users")

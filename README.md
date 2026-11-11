@@ -21,6 +21,7 @@ No panel login, no digging through logs — just ask.
 - ⏰ Schedules: panel-configured cron tasks (expression, enabled, last/next run)
 - 📊 Player activity analysis: who plays most, peak hours, who is still online (from logs)
 - 👥 Sub-user permissions: who else can manage this server and what they were granted
+- 🗂️ Mounts: which extra storage this server has, and whether it is read-only
 - ⚡ Power controls: start / stop / restart / kill
 - 🖥️ Console: send commands
 - 📁 Files: browse, read, write, upload, rename, delete, create folders, one-time download links

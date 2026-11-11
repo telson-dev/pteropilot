@@ -39,9 +39,9 @@ def test_doc_tool_table_matches_registration():
     assert not only_doc, f"文档有但代码缺：{sorted(only_doc)}"
 
 
-def test_tool_count_is_42():
-    """当前工具数固定为 42；新增/删除工具时同步更新本断言与 docs/README.md。"""
-    assert len(_actual_tools()) == 42
+def test_tool_count_is_43():
+    """当前工具数固定为 43；新增/删除工具时同步更新本断言与 docs/README.md。"""
+    assert len(_actual_tools()) == 43
 
 
 def test_every_tool_has_description():

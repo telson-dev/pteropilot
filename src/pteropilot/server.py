@@ -536,6 +536,38 @@ async def diagnose_crash(server_id: str, tail: int = 60) -> str:
 
 
 @mcp.tool()
+async def list_mounts(server_id: str) -> str:
+    """查看服务器的挂载点（额外存储盘）：挂了哪些目录、是否只读。
+
+    只读。挂载点由面板管理员分配，决定这个服能访问哪些额外文件
+    （常见于把世界存档 / 插件配置放在共享存储上）。「我上传的文件怎么看不到」
+    往往是挂载没配或只读。
+    """
+    mounts = await panel.server_mounts(server_id)
+    if not mounts:
+        return "(该服务器没有挂载点：所有文件都在本机卷内；如需要共享存储，请在面板为该服分配 mount)"
+
+    rows: list[str] = []
+    for m in mounts:
+        attrs = (m or {}).get("attributes") or {}
+        name = attrs.get("name") or attrs.get("id") or "?"
+        source = attrs.get("source") or ""
+        target = attrs.get("target") or ""
+        ro = attrs.get("read_only")
+        flags: list[str] = []
+        if ro is True:
+            flags.append("只读")
+        elif ro is False:
+            flags.append("可写")
+        if attrs.get("user_mountable"):
+            flags.append("用户可自行挂载")
+        path = f"{source} → {target}" if source or target else ""
+        row = f"- {name}" + (f" | {path}" if path else "") + (f" | {'、'.join(flags)}" if flags else "")
+        rows.append(row)
+    return f"共 {len(mounts)} 个挂载点：\n" + "\n".join(rows)
+
+
+@mcp.tool()
 async def list_server_users(server_id: str) -> str:
     """查看能管理这台服务器的子用户（邮箱 + 权限数量），确认「谁能动我的服」。
 
