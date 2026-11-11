@@ -96,6 +96,16 @@ Then just talk to your AI naturally, for example:
 - "When was the latest backup on smp? Create one if missing"
 - "Upload this plugin to the creative server and restart it"
 
+## Cannot reach your panel? Run the doctor
+
+```bash
+pteropilot --doctor              # checks Python, config, key prefix, connectivity, alert channels
+pteropilot --doctor --no-network # config only, no network calls
+```
+
+The output never contains secrets (only key prefixes), so you can paste it
+as-is when asking for help.
+
 ## Check your version first
 
 ```bash

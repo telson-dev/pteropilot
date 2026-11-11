@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import os
 import sys
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
-from .client import POWER_SIGNALS, PanelClient
+from .client import POWER_SIGNALS, PanelClient, redact
 from .config import Config, key_role_warnings
 
 mcp = FastMCP("pteropilot")
@@ -1395,12 +1396,142 @@ def _print_version() -> None:
         )
 
 
+def _run_doctor(skip_network: bool = False) -> int:
+    """环境自检：Python 版本、配置、密钥前缀、面板连通、告警配置。
+
+    用户报「连不上面板/工具没反应」时，让他跑 `pteropilot --doctor` 并把输出贴过来，
+    比自己猜环境快得多。输出**不含任何密钥**（只显示前缀与规范化后的地址）。
+    """
+    import platform as _platform
+
+    print(f"pteropilot v{__version__}（{_tool_count()} 个工具）")
+    print(f"Python {_platform.python_version()}　{_platform.system()} {_platform.machine()}")
+    problems: list[str] = []
+    hints: list[str] = []
+
+    # 1) 配置
+    raw_url = os.environ.get("PANEL_URL", "")
+    api_key = os.environ.get("PANEL_API_KEY", "")
+    app_key = os.environ.get("PANEL_APP_KEY", "")
+    if not raw_url:
+        problems.append("未设置 PANEL_URL")
+        hints.append("在 MCP 客户端配置的 env 里填面板根地址，如 https://panel.example.com")
+    else:
+        norm = config.panel_url
+        suffix_note = ""
+        if raw_url.strip().rstrip("/") != norm:
+            suffix_note = f"（已自动规范化：{raw_url} → {norm}）"
+        print(f"PANEL_URL: {norm} {suffix_note}".rstrip())
+
+    if not api_key:
+        problems.append("未设置 PANEL_API_KEY")
+        hints.append("面板「账户 → API 凭证」生成客户端密钥（ptlc_ / pacc_）")
+    else:
+        prefix = api_key.split("_")[0] + "_" if "_" in api_key[:6] else "（前缀无法识别）"
+        print(f"PANEL_API_KEY: {prefix}…（共 {len(api_key)} 字符）")
+    if app_key:
+        print(f"PANEL_APP_KEY: {app_key[:5]}…（共 {len(app_key)} 字符）")
+    else:
+        hints.append("未设置 PANEL_APP_KEY：list_nodes / list_users 等应用级工具会 403（可选）")
+
+    # 2) 密钥角色（复用启动时的诊断）
+    for w in key_role_warnings(config):
+        hints.append(w)
+
+    # 3) 只读模式
+    if config.readonly:
+        print("PANEL_READONLY: 开启（所有写操作会被拒绝）")
+
+    # 4) 面板连通
+    if problems:
+        print()
+        print("结论：配置不完整，先补齐下面的项：")
+        for x in problems:
+            print(f"  ✗ {x}")
+        for h in hints:
+            print(f"  · {h}")
+        return 1
+
+    if skip_network:
+        print()
+        print("（已跳过网络检查 --no-network）")
+        for h in hints:
+            print(f"  · {h}")
+        return 0
+
+    print()
+    print("连接面板中…")
+    try:
+        client = PanelClient(config, timeout=15.0)
+
+        async def _check() -> tuple[int, list[str]]:
+            try:
+                servers = await client.client_servers()
+                names = []
+                for s in servers[:5]:
+                    a = (s or {}).get("attributes") or {}
+                    names.append(a.get("name") or a.get("identifier") or "?")
+                return len(servers), names
+            finally:
+                await client.aclose()
+
+        count, names = asyncio.run(_check())
+        print(f"✅ 连接成功：可访问 {count} 台服务器" + (f"（{('、'.join(names))}）" if names else ""))
+    except Exception as exc:  # noqa: BLE001
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        print(f"❌ 连接失败：{type(exc).__name__}: {redact(str(exc))}")
+        if status == 401:
+            problems.append("API Key 被面板拒绝（401）")
+            hints.append("密钥无效或已撤销，去「账户 → API 凭证」重新生成")
+        elif status == 403:
+            problems.append("密钥权限不足（403）")
+            hints.append("核心工具走客户端 API，请用客户端密钥 ptlc_ / pacc_ 作为 PANEL_API_KEY")
+        elif status == 404:
+            problems.append("地址 404")
+            hints.append("确认填的是面板根地址（不要带 /api、/api/client）")
+        else:
+            problems.append("无法连接面板")
+            hints.append("检查面板是否在线、网络能否访问该域名（可先用浏览器打开面板）")
+
+    # 5) 告警相关（可选功能）
+    import shutil
+
+    if os.environ.get("WEBHOOK_URL") or os.environ.get("SMTP_HOST"):
+        print("告警渠道：已配置（跑 `pteropilot-alerts --test` 可验证能否发出去）")
+    else:
+        print("告警渠道：未配置（可选；装好后用 `pteropilot-alerts --test` 验证）")
+    try:
+        from importlib.metadata import entry_points
+
+        eps = entry_points()
+        names = {ep.name for ep in (eps.select(group="console_scripts") if hasattr(eps, "select") else eps.get("console_scripts", []))}
+        if "pteropilot-alerts" not in names and not shutil.which("pteropilot-alerts"):
+            hints.append("未找到 pteropilot-alerts 命令（pip/uv 安装后重启终端）")
+    except Exception:  # noqa: BLE001
+        if not shutil.which("pteropilot-alerts"):
+            hints.append("未找到 pteropilot-alerts 命令（pip/uv 安装后重启终端）")
+
+    print()
+    if problems:
+        print("结论：有问题需要处理：")
+        for x in problems:
+            print(f"  ✗ {x}")
+    else:
+        print("结论：环境正常。")
+    for h in hints:
+        print(f"  · {h}")
+    return 1 if problems else 0
+
+
 def main() -> None:
     # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     argv = sys.argv[1:]
     if "--version" in argv or "-V" in argv or "-v" in argv:
         _print_version()
         return
+    # --doctor：一键环境自检（不启动 server）
+    if "--doctor" in argv:
+        sys.exit(_run_doctor(skip_network="--no-network" in argv))
     try:
         config.validate()
     except ValueError as exc:
