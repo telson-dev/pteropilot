@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- `pteropilot-alerts --reset`：清空冷却/连续确认状态（调完灵敏度想立刻验证、或服务器已修好但还卡在冷却期时用）；只动状态文件、不碰按服务器配置，支持 `--dry-run` 与 `--json`
+
 ### Changed
 - 发布脚本（`scripts/release.py`、`scripts/sync_release_notes.py`）的 GitHub API 调用加入**指数退避重试**：网络抖动（RemoteDisconnected / 超时 / 连接错误）自动重试 3 次，HTTP 4xx/5xx 仍立即失败——曾因一次连接中断导致打 tag 半途失败
 

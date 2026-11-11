@@ -124,6 +124,12 @@ PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
 # run every 5 minutes
 */5 * * * * PANEL_URL=... PANEL_API_KEY=... pteropilot-alerts \
   --webhook "https://oapi.dingtalk.com/robot/send?access_token=xxx" >> /var/log/pteropilot-alerts.log 2>&1
+
+# verify the notification channel (no server reads, no state writes)
+pteropilot-alerts --webhook "..." --test
+
+# stuck in cooldown / changed sensitivity: clear state and start over
+pteropilot-alerts --reset
 ```
 
 Options: **On Windows** (local servers / Windows VPS): no cron needed — install a scheduled task

@@ -426,6 +426,41 @@ def _run_channel_test(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_reset(args) -> int:
+    """清空冷却/连续确认状态，让下一次扫描从头开始。
+
+    常见场景：调完灵敏度想立刻验证、或服务器已修复但还卡在冷却期里看不到新告警。
+    只动状态文件，不碰按服务器配置（alerts.json）。
+    """
+    path = Path(args.state_file) if args.state_file else default_state_file()
+    existed = path.exists()
+    size = path.stat().st_size if existed else 0
+    if args.dry_run:
+        msg = "将删除" if existed else "状态文件不存在，无需删除"
+        if args.json:
+            print(json.dumps({"reset": True, "dry_run": True, "path": str(path), "existed": existed}, ensure_ascii=False))
+        else:
+            print(f"{msg}：{path}")
+        return 0
+    try:
+        if existed:
+            path.unlink()
+    except OSError as exc:
+        if args.json:
+            print(json.dumps({"reset": False, "path": str(path), "error": str(exc)}, ensure_ascii=False))
+        else:
+            print(f"❌ 删除失败：{exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps({"reset": True, "path": str(path), "removed": existed}, ensure_ascii=False))
+    elif existed:
+        print(f"✅ 已清空冷却状态（{size} 字节）：{path}")
+        print("下次扫描会重新开始计数，不会因旧冷却跳过告警。")
+    else:
+        print(f"状态文件不存在，无需清空：{path}")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="pteropilot-alerts",
@@ -449,7 +484,12 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="演练模式：只打印将会通知哪些服务器，不真的推送/发邮件、不写状态文件")
     parser.add_argument("--json", action="store_true", help="以 JSON 输出结果（机器可读，便于 cron/监控脚本解析）")
     parser.add_argument("--test", action="store_true", help="发一条测试通知验证渠道配置（webhook/邮件是否配对），不读服务器、不写状态")
+    parser.add_argument("--reset", action="store_true", help="清空冷却/连续确认状态（调完灵敏度或卡在冷却期时用），不影响按服务器配置")
     args = parser.parse_args()
+
+    # --reset 只动本地状态文件，不需要配置通知渠道
+    if args.reset:
+        raise SystemExit(_run_reset(args))
 
     if not args.webhook and not (args.smtp_host and args.smtp_user and args.mail_to):
         parser.error("至少需要一种通知渠道：--webhook，或完整的 SMTP 邮件配置（--smtp-host/--smtp-user/--smtp-pass/--mail-to）")

@@ -126,6 +126,12 @@ PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
 # 每 5 分钟跑一次
 */5 * * * * PANEL_URL=... PANEL_API_KEY=... pteropilot-alerts \
   --webhook "https://oapi.dingtalk.com/robot/send?access_token=***" >> /var/log/pteropilot-alerts.log 2>&1
+
+# 先验证通知渠道配没配对（不读服务器、不写状态）
+pteropilot-alerts --webhook "..." --test
+
+# 卡在冷却期 / 调完灵敏度想重新计数：清空状态
+pteropilot-alerts --reset
 ```
 
 **Windows 用户**（本机开服 / Windows 云主机）：不用手写 cron，一条命令装好计划任务：
