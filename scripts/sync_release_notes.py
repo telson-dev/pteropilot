@@ -57,7 +57,17 @@ pteropilot --version
 """
 
 
-def api(method: str, path: str, body: dict | None = None) -> tuple[int, dict | None]:
+def _retryable(exc: Exception) -> bool:
+    import http.client
+
+    return isinstance(
+        exc,
+        (urllib.error.URLError, TimeoutError, ConnectionError,
+         http.client.RemoteDisconnected, http.client.IncompleteRead),
+    )
+
+
+def api(method: str, path: str, body: dict | None = None, retries: int = 3) -> tuple[int, dict | None]:
     req = urllib.request.Request(f"https://api.github.com/repos/{REPO}{path}", method=method)
     req.add_header("Authorization", "Bearer " + os.environ["GH_TOKEN"])
     req.add_header("Accept", "application/vnd.github+json")
@@ -65,13 +75,22 @@ def api(method: str, path: str, body: dict | None = None) -> tuple[int, dict | N
     data = json.dumps(body).encode("utf-8") if body is not None else None
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(req, data, timeout=60) as r:
-            raw = r.read().decode("utf-8")
-            return r.status, (json.loads(raw) if raw else None)
-    except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", "replace")
-        return exc.code, {"error": raw[:300]}
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, data, timeout=60) as r:
+                raw = r.read().decode("utf-8")
+                return r.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", "replace")
+            return exc.code, {"error": raw[:300]}
+        except Exception as exc:  # noqa: BLE001
+            if not _retryable(exc) or attempt == retries - 1:
+                raise
+            import time as _time
+
+            print(f"网络抖动（{type(exc).__name__}），{2 ** attempt} 秒后重试…", file=sys.stderr)
+            _time.sleep(2 ** attempt)
+    raise RuntimeError("api 调用失败")
 
 
 def changelog_section(version: str) -> str | None:

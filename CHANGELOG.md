@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- 发布脚本（`scripts/release.py`、`scripts/sync_release_notes.py`）的 GitHub API 调用加入**指数退避重试**：网络抖动（RemoteDisconnected / 超时 / 连接错误）自动重试 3 次，HTTP 4xx/5xx 仍立即失败——曾因一次连接中断导致打 tag 半途失败
+
 ## [0.2.26] - 2026-11-11
 
 ### Changed

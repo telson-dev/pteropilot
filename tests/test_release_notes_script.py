@@ -56,3 +56,49 @@ def test_script_usage_requires_token():
     )
     assert out.returncode == 1
     assert "GH_TOKEN" in (out.stdout + out.stderr)
+
+
+
+def test_retryable_classifies_network_errors():
+    """网络抖动应重试；HTTPError 是逻辑问题不该重试。"""
+    import http.client
+    import urllib.error
+
+    assert srn._retryable(http.client.RemoteDisconnected("x"))
+    assert srn._retryable(TimeoutError("x"))
+    assert srn._retryable(ConnectionError("x"))
+    assert srn._retryable(urllib.error.URLError("x"))
+    assert not srn._retryable(ValueError("x"))
+
+
+def test_api_retries_then_succeeds(monkeypatch):
+    """第一次网络断开、第二次成功时应自动重试并返回结果。"""
+    import http.client
+    import urllib.request
+
+    calls = {"n": 0}
+
+    class _Resp:
+        status = 200
+
+        def read(self):
+            return b'{"ok": true}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, data=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise http.client.RemoteDisconnected("boom")
+        return _Resp()
+
+    monkeypatch.setenv("GH_TOKEN", "t")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("time.sleep", lambda *_: None)  # 脚本内 import time as _time，patch 全局即可
+    code, data = srn.api("GET", "/x")
+    assert calls["n"] == 2
+    assert code == 200 and data == {"ok": True}
