@@ -99,7 +99,7 @@ Then just talk to your AI naturally, for example:
 
 ```bash
 pteropilot --version
-# pteropilot v0.2.25 (42 MCP tools)
+# pteropilot v0.2.26 (42 MCP tools)
 ```
 
 **If the tool count looks low you are on an old build.** PyPI may lag behind
@@ -221,7 +221,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.25** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.26** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

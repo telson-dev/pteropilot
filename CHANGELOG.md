@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.2.26] - 2026-11-11
+
 ### Changed
 - `pteropilot --version` 在工具数明显偏少（<30）时额外提示「可能装到了旧版本（PyPI 发布可能滞后）」，避免用户以为功能缺失
 - README 安装章节：补国内 PyPI 镜像（清华源）命令与 `--version` 自检方法；把国内常不可用的 git+GitHub 安装方式换成 GitHub Release 下载 `.whl`，并明确说明本项目不提供代理方案
