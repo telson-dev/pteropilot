@@ -113,12 +113,15 @@ pteropilot --broadcast "say Restarting in 5 minutes"              # running serv
 pteropilot --broadcast "whitelist add Steve"                     # safe commands need no confirm
 pteropilot --broadcast "stop" --confirm                          # dangerous ones do
 pteropilot --broadcast "say hi" --servers smp,creative           # pick servers
+pteropilot --broadcast "say hi" --json                           # machine-readable
 ```
 
 Useful in cron/systemd timers: no MCP client needed, one command, then exit.
 Dangerous commands (`stop` / `kill` / `op` / `ban` / `whitelist off` / ...) are
 refused without `--confirm`. Exit codes: `0` all sent, `1` some failed,
 `2` bad usage, `3` refused (read-only / missing confirm).
+`--json` prints `{status, command, scope, total, ok, failed, results[]}`;
+refusals carry `reason` (`readonly` / `need_confirm` / `empty_command` / `no_running` / `no_targets`).
 
 
 ## Check your version first

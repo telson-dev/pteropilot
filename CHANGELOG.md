@@ -11,7 +11,7 @@
   - 不传 `server_ids` 时**只发给 running 的服务器**（停机的发了也收不到），传 `["*"]` 才含停机的
   - **高危指令二次确认**：`stop` / `kill` / `op` / `ban` / `whitelist off` / `difficulty peaceful` 等必须 `confirm=True`——一条 `op` 误发会同时作用于所有服
   - 只读模式整体拒绝；单台失败单独标注、不阻断其余
-- CLI `pteropilot --broadcast "指令"`：不启动 MCP server，直接广播一次后退出——给 cron / 计划任务用（维护前定时通知不必先起客户端）。支持 `--servers a,b` 选服、`--confirm` 确认高危指令；退出码 `0` 全部发出 / `1` 有失败 / `2` 用法错误 / `3` 被拦截
+- CLI `pteropilot --broadcast "指令"`：不启动 MCP server，直接广播一次后退出——给 cron / 计划任务用（维护前定时通知不必先起客户端）。支持 `--servers a,b` 选服、`--confirm` 确认高危指令；退出码 `0` 全部发出 / `1` 有失败 / `2` 用法错误 / `3` 被拦截；`--json` 输出结构化结果（`status` / `reason` / `scope` / `total` / `ok` / `failed` / `results[]`）
 
 
 ## [0.2.28] - 2026-11-15

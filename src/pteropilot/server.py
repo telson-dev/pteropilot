@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import os
 import sys
 from typing import Any
@@ -1068,6 +1069,126 @@ def _is_dangerous_broadcast(command: str) -> bool:
     return any(c == d.strip() or c.startswith(d) for d in _BROADCAST_DANGEROUS)
 
 
+async def _broadcast_data(
+    command: str,
+    server_ids: list[str] | None = None,
+    confirm: bool = False,
+) -> dict:
+    """广播的结构化结果（MCP 工具与 CLI ``--json`` 共用，避免两套逻辑走偏）。
+
+    返回的 dict 一定包含 ``status`` 字段：
+      ``ok`` 已发送 / ``refused`` 被拦截（只读、缺 confirm、空指令、无目标）
+    被拦截时 ``reason`` 说明原因，``results`` 为空。
+    """
+    data: dict = {
+        "command": (command or "").strip(),
+        "status": "ok",
+        "reason": None,
+        "scope": None,
+        "dangerous": False,
+        "total": 0,
+        "ok": 0,
+        "failed": 0,
+        "results": [],
+    }
+
+    denied = _denied_if_readonly()
+    if denied:
+        data.update(status="refused", reason="readonly")
+        return data
+
+    cmd = data["command"]
+    if not cmd:
+        data.update(status="refused", reason="empty_command")
+        return data
+
+    # 1) 解析目标
+    if server_ids is None:
+        servers = await panel.client_servers()
+        if not servers:
+            data.update(status="refused", reason="no_servers")
+            return data
+
+        async def _state(sid: str) -> str:
+            try:
+                attrs = await panel.resources(sid)
+                return str(attrs.get("current_state") or "?")
+            except Exception:
+                return "?"
+
+        pairs = []
+        for s in servers:
+            a = _attrs(s)
+            sid = a.get("identifier") or a.get("id")
+            if sid:
+                pairs.append((str(sid), a.get("name") or str(sid)))
+        states = await asyncio.gather(*(_state(sid) for sid, _ in pairs))
+        target_ids = [sid for (sid, _n), st in zip(pairs, states) if st == "running"]
+        if not target_ids:
+            data.update(status="refused", reason="no_running")
+            return data
+        data["scope"] = "running"
+    else:
+        if not server_ids:
+            data.update(status="refused", reason="no_targets")
+            return data
+        target_ids = await _resolve_target_ids(server_ids)
+        if not target_ids:
+            data.update(status="refused", reason="no_targets")
+            return data
+        data["scope"] = "all" if server_ids == ["*"] else "explicit"
+
+    # 2) 高危指令二次确认
+    data["dangerous"] = _is_dangerous_broadcast(cmd)
+    if data["dangerous"] and not confirm:
+        data.update(status="refused", reason="need_confirm")
+        return data
+
+    # 3) 并发发送
+    async def _apply(sid: str) -> dict:
+        try:
+            await panel.send_command(sid, cmd)
+            return {"id": sid, "ok": True, "error": None}
+        except Exception as exc:  # noqa: BLE001 - 单台失败要如实带回来
+            return {"id": sid, "ok": False, "error": type(exc).__name__}
+
+    results = list(await asyncio.gather(*(_apply(sid) for sid in target_ids)))
+    data["results"] = results
+    data["total"] = len(results)
+    data["ok"] = sum(1 for r in results if r["ok"])
+    data["failed"] = data["total"] - data["ok"]
+    return data
+
+
+def _format_broadcast(data: dict) -> str:
+    """把结构化结果渲染成人看的文本（MCP 工具返回用）。"""
+    reason_text = {
+        "readonly": "⛔ 当前为只读模式（PANEL_READONLY=1），已拒绝该操作。",
+        "empty_command": "(指令为空，什么都没发)",
+        "no_servers": "(没有可访问的服务器)",
+        "no_running": "(当前没有 running 的服务器，未发送)",
+        "no_targets": "(未指定任何服务器)",
+        "need_confirm": "⚠️ 广播高危指令属于高危操作，已拦截。确认无误后请带 confirm=True 重新调用。",
+    }
+    if data["status"] != "ok":
+        return reason_text.get(data["reason"] or "", "(未执行)")
+
+    scope_text = {
+        "running": "所有 running 服务器",
+        "all": "全部服务器",
+        "explicit": f"指定 {data['total']} 台",
+    }[data["scope"] or "explicit"]
+    header = (
+        f"广播「{data['command']}」→ {scope_text}："
+        f"共 {data['total']} 台，成功 {data['ok']}、失败 {data['failed']}"
+    )
+    lines = [
+        f"- {r['id']} | " + ("✅ 已发送" if r["ok"] else f"❌ 失败（{r['error']}）")
+        for r in data["results"]
+    ]
+    return header + ("\n" + "\n".join(lines) if lines else "")
+
+
 @mcp.tool()
 async def broadcast_command(
     command: str,
@@ -1085,79 +1206,10 @@ async def broadcast_command(
       ``confirm=True``——一次误发会同时作用于所有服务器；
     - 只读模式下整体拒绝，一个请求都不发出；
     - 单台失败（无权限/超时/面板报错）单独标注，不阻断其余服务器。
+
+    CLI 里 ``pteropilot --broadcast "..." --json`` 输出的是同一份结构化结果。
     """
-    denied = _denied_if_readonly()
-    if denied:
-        return denied
-
-    cmd = (command or "").strip()
-    if not cmd:
-        return "(指令为空，什么都没发)"
-
-    # 1) 解析目标
-    if server_ids is None:
-        # 未指定：只发 running 的服务器
-        servers = await panel.client_servers()
-        if not servers:
-            return "(没有可访问的服务器)"
-        running: list[str] = []
-
-        async def _state(sid: str) -> str:
-            try:
-                attrs = await panel.resources(sid)
-                return str(attrs.get("current_state") or "?")
-            except Exception:
-                return "?"
-
-        pairs = []
-        for s in servers:
-            a = _attrs(s)
-            sid = a.get("identifier") or a.get("id")
-            if sid:
-                pairs.append((str(sid), a.get("name") or str(sid)))
-        states = await asyncio.gather(*(_state(sid) for sid, _ in pairs))
-        for (sid, _name_), st in zip(pairs, states):
-            if st == "running":
-                running.append(sid)
-        if not running:
-            return "(当前没有 running 的服务器，未发送)"
-        target_ids = running
-        scope_note = "所有 running 服务器"
-    else:
-        if not server_ids:
-            return "(未指定任何服务器)"
-        target_ids = await _resolve_target_ids(server_ids)
-        if not target_ids:
-            return "(没有可访问的服务器)"
-        scope_note = "全部服务器" if server_ids == ["*"] else f"指定 {len(target_ids)} 台"
-
-    # 2) 高危指令二次确认
-    if _is_dangerous_broadcast(cmd):
-        blocked = _need_confirm(confirm, f"广播高危指令「{cmd}」（{scope_note}）")
-        if blocked:
-            return blocked
-
-    # 3) 并发发送
-    ok = 0
-    failed = 0
-    lines: list[str] = []
-
-    async def _apply(sid: str) -> tuple[str, bool]:
-        try:
-            await panel.send_command(sid, cmd)
-            return f"- {sid} | ✅ 已发送", True
-        except Exception:
-            return f"- {sid} | ❌ 失败（无权限/超时/面板报错）", False
-
-    for line, good in await asyncio.gather(*(_apply(sid) for sid in target_ids)):
-        lines.append(line)
-        if good:
-            ok += 1
-        else:
-            failed += 1
-
-    header = f"广播「{cmd}」→ {scope_note}：共 {len(target_ids)} 台，成功 {ok}、失败 {failed}"
-    return header + "\n" + "\n".join(lines)
+    return _format_broadcast(await _broadcast_data(command, server_ids, confirm))
 
 
 @mcp.tool()
@@ -1690,12 +1742,19 @@ def _run_broadcast(argv: list[str]) -> int:
                 ids = None
 
     confirm = "--confirm" in argv
-    out = asyncio.run(broadcast_command(command, ids, confirm))
-    print(out)
-    # 被拦截（只读 / 缺 confirm / 空指令）也算非零，方便脚本判断
-    if "只读模式" in out or "高危操作" in out or "指令为空" in out or "未指定任何服务器" in out:
+    as_json = "--json" in argv
+    data = asyncio.run(_broadcast_data(command, ids, confirm))
+
+    if as_json:
+        # 结构化输出：给脚本用（jq / 计划任务里判断退出码 + 解析结果）
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(_format_broadcast(data))
+
+    # 被拦截（只读 / 缺 confirm / 空指令 / 无目标）也算非零，方便脚本判断
+    if data["status"] == "refused":
         return 3
-    return 0 if "失败 0" in out else 1
+    return 0 if data["failed"] == 0 else 1
 
 
 def main() -> None:

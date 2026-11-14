@@ -115,11 +115,13 @@ pteropilot --broadcast "say 服务器 5 分钟后重启"      # 只发 running �
 pteropilot --broadcast "whitelist add Steve"        # 普通指令免确认
 pteropilot --broadcast "stop" --confirm             # 高危指令必须确认
 pteropilot --broadcast "say hi" --servers smp,creative
+pteropilot --broadcast "say hi" --json              # 结构化输出，给脚本用
 ```
 
 适合写进 cron / 计划任务：不用起 MCP 客户端，跑一条就退出。
 高危指令（`stop` / `kill` / `op` / `ban` / `whitelist off` 等）不带 `--confirm` 会被拒绝。
 退出码：`0` 全部发出、`1` 有失败、`2` 用法错误、`3` 被拦截（只读 / 缺确认）。
+`--json` 输出 `{status, command, scope, total, ok, failed, results[]}`，被拦截时带 `reason`（`readonly` / `need_confirm` / `empty_command` / `no_running` / `no_targets`）。
 
 输出**不含任何密钥**（只显示前缀），可以直接整段贴给我排查。会告诉你：
 配置是否齐全、地址是否被自动规范化（带 `/api` 会被剥掉）、密钥前缀是否用错

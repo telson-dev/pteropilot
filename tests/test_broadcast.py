@@ -181,3 +181,75 @@ def test_cli_dangerous_with_confirm(fake, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert len(fake.sent) == 2
+
+
+# ---------------- CLI --json ----------------
+
+import json as _json
+
+
+def _cli_json(capsys):
+    out = capsys.readouterr().out.strip()
+    assert out.startswith("{"), f"不是 JSON: {out[:80]}"
+    return _json.loads(out)
+
+
+def test_cli_json_ok_payload(fake, capsys):
+    rc = srv._run_broadcast(["--broadcast", "say hi", "--json"])
+    d = _cli_json(capsys)
+    assert rc == 0
+    assert d["status"] == "ok"
+    assert d["command"] == "say hi"
+    assert d["scope"] == "running"
+    assert d["total"] == 2 and d["ok"] == 2 and d["failed"] == 0
+    assert [r["id"] for r in d["results"]] == ["a", "b"]
+    assert all(r["ok"] for r in d["results"])
+
+
+def test_cli_json_need_confirm(fake, capsys):
+    rc = srv._run_broadcast(["--broadcast", "stop", "--json"])
+    d = _cli_json(capsys)
+    assert rc == 3
+    assert d["status"] == "refused"
+    assert d["reason"] == "need_confirm"
+    assert d["dangerous"] is True
+    assert d["results"] == []
+
+
+def test_cli_json_empty_command(fake, capsys):
+    rc = srv._run_broadcast(["--broadcast", "   ", "--json"])
+    d = _cli_json(capsys)
+    assert rc == 3
+    assert d["reason"] == "empty_command"
+
+
+def test_cli_json_readonly(fake, capsys):
+    _bind(fake, readonly=True)
+    rc = srv._run_broadcast(["--broadcast", "say hi", "--json"])
+    d = _cli_json(capsys)
+    assert rc == 3
+    assert d["reason"] == "readonly"
+
+
+def test_cli_json_partial_failure():
+    f = FakePanel({"a": "running", "b": "running"}, fail_ids={"a"})
+    _bind(f)
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = srv._run_broadcast(["--broadcast", "say hi", "--json"])
+    d = _json.loads(buf.getvalue())
+    assert rc == 1
+    assert d["failed"] == 1 and d["ok"] == 1
+    bad = [r for r in d["results"] if not r["ok"]]
+    assert bad and bad[0]["id"] == "a" and bad[0]["error"] == "RuntimeError"
+
+
+def test_broadcast_data_is_shared_by_tool_and_cli(fake):
+    """MCP 工具与 CLI 必须走同一份结构化逻辑，不能各写一套。"""
+    import asyncio as _aio
+    d = _aio.run(srv._broadcast_data("say hi"))
+    assert d["status"] == "ok" and d["total"] == 2
+    # 格式化输出里应能看到同样的数字
+    text = srv._format_broadcast(d)
+    assert "成功 2" in text and "失败 0" in text
