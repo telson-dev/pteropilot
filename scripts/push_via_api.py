@@ -29,6 +29,9 @@ from pathlib import Path
 REPO = "telson-dev/pteropilot"
 BRANCH = "main"
 ROOT = Path(r"D:\Projects\pteropilot")
+# 上次推送成功时本地的 HEAD。API 推上去的 commit 本地没有对象，
+# 所以不能拿远程 sha 做 `git diff` 的基线——用这个文件记住。
+BASE_FILE = ROOT / ".git" / "api-push-base"
 
 
 def token() -> str:
@@ -96,8 +99,28 @@ def main() -> int:
     print(f"远程 HEAD: {remote_sha[:7]}")
     print(f"本地 HEAD: {local_sha[:7]}")
 
-    # 相对远程变动的文件（本地视角）
-    diff = git("diff", "--name-status", remote_sha, local_sha)
+    # 基线：上次推送过的本地 HEAD（远程 commit 本地没有对象，不能直接用）
+    if BASE_FILE.exists():
+        base = BASE_FILE.read_text(encoding="utf-8").strip()
+    else:
+        base = ""
+    if not base or subprocess.run(
+        ["git", "cat-file", "-e", base], cwd=str(ROOT), capture_output=True
+    ).returncode != 0:
+        # 兜底：远程对象本地若存在就用它，否则报清楚
+        if subprocess.run(
+            ["git", "cat-file", "-e", remote_sha], cwd=str(ROOT), capture_output=True
+        ).returncode == 0:
+            base = remote_sha
+        else:
+            raise SystemExit(
+                f"没有可用基线。请把上次推送时的本地 commit 写进 {BASE_FILE}\n"
+                f"（例如：echo <sha> > .git/api-push-base）"
+            )
+    print(f"diff 基线: {base[:7]}")
+
+    # 相对基线变动的文件（本地视角）
+    diff = git("diff", "--name-status", base, local_sha)
     changes: list[tuple[str, str]] = []
     for line in diff.splitlines():
         if not line.strip():
@@ -160,7 +183,8 @@ def main() -> int:
         f"/repos/{REPO}/git/refs/heads/{BRANCH}",
         {"sha": commit["sha"], "force": False},
     )
-    print(f"✅ {BRANCH} 已更新 -> {commit['sha'][:7]}")
+    BASE_FILE.write_text(local_sha, encoding="utf-8")
+    print(f"✅ {BRANCH} 已更新 -> {commit['sha'][:7]}（基线记为本地 {local_sha[:7]}）")
     return 0
 
 
