@@ -107,6 +107,20 @@ pteropilot --doctor              # 检查 Python/配置/密钥前缀/面板连�
 pteropilot --doctor --no-network # 只查配置，不联网
 ```
 
+
+## 广播一条指令到所有服务器
+
+```bash
+pteropilot --broadcast "say 服务器 5 分钟后重启"      # 只发 running 的服务器
+pteropilot --broadcast "whitelist add Steve"        # 普通指令免确认
+pteropilot --broadcast "stop" --confirm             # 高危指令必须确认
+pteropilot --broadcast "say hi" --servers smp,creative
+```
+
+适合写进 cron / 计划任务：不用起 MCP 客户端，跑一条就退出。
+高危指令（`stop` / `kill` / `op` / `ban` / `whitelist off` 等）不带 `--confirm` 会被拒绝。
+退出码：`0` 全部发出、`1` 有失败、`2` 用法错误、`3` 被拦截（只读 / 缺确认）。
+
 输出**不含任何密钥**（只显示前缀），可以直接整段贴给我排查。会告诉你：
 配置是否齐全、地址是否被自动规范化（带 `/api` 会被剥掉）、密钥前缀是否用错
 （`ptla_` 应用密钥不能给核心工具用）、面板连通状态与 401/403/404 的具体含义。
@@ -115,7 +129,7 @@ pteropilot --doctor --no-network # 只查配置，不联网
 
 ```bash
 pteropilot --version
-# 输出：pteropilot v0.2.27（43 个 MCP 工具）
+# 输出：pteropilot v0.2.29（45 个 MCP 工具）
 ```
 
 **工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），
@@ -224,7 +238,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.27**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.29**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 

@@ -106,11 +106,26 @@ pteropilot --doctor --no-network # config only, no network calls
 The output never contains secrets (only key prefixes), so you can paste it
 as-is when asking for help.
 
+## Broadcast one command to every server
+
+```bash
+pteropilot --broadcast "say Restarting in 5 minutes"              # running servers only
+pteropilot --broadcast "whitelist add Steve"                     # safe commands need no confirm
+pteropilot --broadcast "stop" --confirm                          # dangerous ones do
+pteropilot --broadcast "say hi" --servers smp,creative           # pick servers
+```
+
+Useful in cron/systemd timers: no MCP client needed, one command, then exit.
+Dangerous commands (`stop` / `kill` / `op` / `ban` / `whitelist off` / ...) are
+refused without `--confirm`. Exit codes: `0` all sent, `1` some failed,
+`2` bad usage, `3` refused (read-only / missing confirm).
+
+
 ## Check your version first
 
 ```bash
 pteropilot --version
-# pteropilot v0.2.27 (43 MCP tools)
+# pteropilot v0.2.29 (45 MCP tools)
 ```
 
 **If the tool count looks low you are on an old build.** PyPI may lag behind
@@ -240,7 +255,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.27** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.29** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

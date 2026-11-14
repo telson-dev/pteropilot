@@ -1044,6 +1044,122 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
     return header + "\n" + "\n".join(lines)
 
 
+# 广播时视为高危的指令（会关服 / 改权限 / 踢人 / 关白名单）。
+# 只做前缀匹配，宁可多拦一次让用户补 confirm，也不要让一条 op 指令一次发给所有服。
+_BROADCAST_DANGEROUS = (
+    "stop",
+    "kill",
+    "restart",
+    "op ",
+    "deop ",
+    "ban ",
+    "ban-ip ",
+    "pardon ",
+    "whitelist off",
+    "difficulty peaceful",
+)
+
+
+def _is_dangerous_broadcast(command: str) -> bool:
+    """判断一条待广播的指令是否属于高危（前缀匹配，忽略大小写与首尾空白）。"""
+    c = command.strip().lower()
+    if not c:
+        return False
+    return any(c == d.strip() or c.startswith(d) for d in _BROADCAST_DANGEROUS)
+
+
+@mcp.tool()
+async def broadcast_command(
+    command: str,
+    server_ids: list[str] | None = None,
+    confirm: bool = False,
+) -> str:
+    """给多台服务器**同时发送同一条控制台指令**（广播）。
+
+    典型场景：维护前提前通知（``say 服务器 5 分钟后重启``）、统一刷白名单、
+    统一改游戏规则。面板只有单台的 ``/command`` 端点，这里退化为「逐台并发调用」。
+
+    - ``server_ids`` 省略时只发给**当前 running** 的服务器（停机的发了也收不到）；
+      传 ``["*"]`` 表示所有可访问服务器（含停机的，会在结果里标出没发成功）；
+    - 高危指令（``stop`` / ``kill`` / ``op`` / ``ban`` / ``whitelist off`` 等）必须
+      ``confirm=True``——一次误发会同时作用于所有服务器；
+    - 只读模式下整体拒绝，一个请求都不发出；
+    - 单台失败（无权限/超时/面板报错）单独标注，不阻断其余服务器。
+    """
+    denied = _denied_if_readonly()
+    if denied:
+        return denied
+
+    cmd = (command or "").strip()
+    if not cmd:
+        return "(指令为空，什么都没发)"
+
+    # 1) 解析目标
+    if server_ids is None:
+        # 未指定：只发 running 的服务器
+        servers = await panel.client_servers()
+        if not servers:
+            return "(没有可访问的服务器)"
+        running: list[str] = []
+
+        async def _state(sid: str) -> str:
+            try:
+                attrs = await panel.resources(sid)
+                return str(attrs.get("current_state") or "?")
+            except Exception:
+                return "?"
+
+        pairs = []
+        for s in servers:
+            a = _attrs(s)
+            sid = a.get("identifier") or a.get("id")
+            if sid:
+                pairs.append((str(sid), a.get("name") or str(sid)))
+        states = await asyncio.gather(*(_state(sid) for sid, _ in pairs))
+        for (sid, _name_), st in zip(pairs, states):
+            if st == "running":
+                running.append(sid)
+        if not running:
+            return "(当前没有 running 的服务器，未发送)"
+        target_ids = running
+        scope_note = "所有 running 服务器"
+    else:
+        if not server_ids:
+            return "(未指定任何服务器)"
+        target_ids = await _resolve_target_ids(server_ids)
+        if not target_ids:
+            return "(没有可访问的服务器)"
+        scope_note = "全部服务器" if server_ids == ["*"] else f"指定 {len(target_ids)} 台"
+
+    # 2) 高危指令二次确认
+    if _is_dangerous_broadcast(cmd):
+        blocked = _need_confirm(confirm, f"广播高危指令「{cmd}」（{scope_note}）")
+        if blocked:
+            return blocked
+
+    # 3) 并发发送
+    ok = 0
+    failed = 0
+    lines: list[str] = []
+
+    async def _apply(sid: str) -> tuple[str, bool]:
+        try:
+            await panel.send_command(sid, cmd)
+            return f"- {sid} | ✅ 已发送", True
+        except Exception:
+            return f"- {sid} | ❌ 失败（无权限/超时/面板报错）", False
+
+    for line, good in await asyncio.gather(*(_apply(sid) for sid in target_ids)):
+        lines.append(line)
+        if good:
+            ok += 1
+        else:
+            failed += 1
+
+    header = f"广播「{cmd}」→ {scope_note}：共 {len(target_ids)} 台，成功 {ok}、失败 {failed}"
+    return header + "\n" + "\n".join(lines)
+
+
 @mcp.tool()
 async def batch_backup_status() -> str:
     """批量备份概览（只读）：遍历我可访问的服务器，逐台列出备份数量、总大小与最近备份时间。
@@ -1543,6 +1659,45 @@ def _run_doctor(skip_network: bool = False) -> int:
     return 1 if problems else 0
 
 
+_BROADCAST_USAGE = (
+    '用法: pteropilot --broadcast "say 服务器 5 分钟后重启" '
+    "[--servers a,b] [--confirm] [--json]"
+)
+
+
+def _run_broadcast(argv: list[str]) -> int:
+    """``pteropilot --broadcast "指令"``：不启动 MCP server，直接广播一次后退出。
+
+    给运维脚本/计划任务用——服务器维护前在 crontab 里跑一条就够了，
+    不必先起 MCP 客户端。高危指令同样要 ``--confirm``。
+    """
+    try:
+        i = argv.index("--broadcast")
+        command = argv[i + 1] if i + 1 < len(argv) else ""
+    except ValueError:
+        command = ""
+    # 下一个 token 是另一个选项 → 说明没给指令
+    if not command or command.startswith("--"):
+        print(_BROADCAST_USAGE, file=sys.stderr)
+        return 2
+
+    ids: list[str] | None = None
+    if "--servers" in argv:
+        j = argv.index("--servers")
+        if j + 1 < len(argv) and not argv[j + 1].startswith("--"):
+            ids = [x.strip() for x in argv[j + 1].split(",") if x.strip()]
+            if not ids:
+                ids = None
+
+    confirm = "--confirm" in argv
+    out = asyncio.run(broadcast_command(command, ids, confirm))
+    print(out)
+    # 被拦截（只读 / 缺 confirm / 空指令）也算非零，方便脚本判断
+    if "只读模式" in out or "高危操作" in out or "指令为空" in out or "未指定任何服务器" in out:
+        return 3
+    return 0 if "失败 0" in out else 1
+
+
 def main() -> None:
     # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     argv = sys.argv[1:]
@@ -1552,6 +1707,14 @@ def main() -> None:
     # --doctor：一键环境自检（不启动 server）
     if "--doctor" in argv:
         sys.exit(_run_doctor(skip_network="--no-network" in argv))
+    # --broadcast：广播一条指令后退出（不启动 server）
+    if "--broadcast" in argv:
+        try:
+            config.validate()
+        except ValueError as exc:
+            print(f"pteropilot --broadcast 需要面板配置：{exc}", file=sys.stderr)
+            return sys.exit(1)
+        sys.exit(_run_broadcast(argv))
     try:
         config.validate()
     except ValueError as exc:

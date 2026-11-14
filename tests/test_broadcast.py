@@ -1,121 +1,183 @@
-"""broadcast_message（批量广播）工具测试。
-
-高危写操作：只读拒绝 + 必须 confirm=True；"*" 表示全部服务器；
-单台失败不阻断其余；路由按 PanelClient.send_command 的实际请求注册。
-"""
+"""broadcast_command 的测试：批量发控制台指令。"""
 
 from __future__ import annotations
 
-import json
+import pytest
 
 import pteropilot.server as srv
-from pteropilot.client import PanelClient
 from pteropilot.config import Config
 
 
-def _bind(fake, readonly: bool = False) -> None:
-    cfg = Config(panel_url="https://panel", panel_api_key="k", readonly=readonly)
-    srv.panel = PanelClient(cfg)
-    srv.config = cfg
+def _bind(fake, readonly: bool = False):
+    """把 server.py 模块里的 panel / config 换成假的（照 test_batch_power.py 的写法）。"""
+    srv.panel = fake
+    srv.config = Config(panel_url="https://panel", panel_api_key="k", readonly=readonly)
 
 
-def _posted(fake, path_contains: str) -> list[dict]:
-    """按路径关键字取该端点的全部 POST 请求体。"""
-    hits = [r for r in fake.requests if r.method == "POST" and path_contains in str(r.url.path)]
-    return [json.loads(r.content) for r in hits]
+class FakePanel:
+    """记录被调用的 send_command / resources，可指定失败与状态。"""
+
+    def __init__(self, states=None, fail_ids=()):
+        self.states = states or {}
+        self.fail_ids = set(fail_ids)
+        self.sent: list[tuple[str, str]] = []
+        self.resources_calls: list[str] = []
+
+    async def client_servers(self):
+        return [
+            {"attributes": {"identifier": sid, "name": f"srv-{sid}"}}
+            for sid in sorted(self.states.keys())
+        ]
+
+    async def resources(self, sid: str):
+        self.resources_calls.append(sid)
+        return {"current_state": self.states.get(sid, "offline")}
+
+    async def send_command(self, sid: str, command: str):
+        if sid in self.fail_ids:
+            raise RuntimeError("boom")
+        self.sent.append((sid, command))
 
 
-def _no_post(fake, path_contains: str) -> bool:
-    return not any(r.method == "POST" and path_contains in str(r.url.path) for r in fake.requests)
+@pytest.fixture
+def fake(monkeypatch):
+    f = FakePanel({"a": "running", "b": "running", "c": "offline"})
+    _bind(f)
+    yield f
+    # 兜底：把全局恢复成默认配置，避免影响同批次的其它测试
+    srv.config = Config(panel_url="https://panel", panel_api_key="k", readonly=False)
 
 
-def _servers_payload(data: list[dict]) -> dict:
-    return {
-        "data": data,
-        "meta": {"pagination": {"total_pages": 1, "current_page": 1, "total": len(data)}},
-    }
+@pytest.mark.asyncio
+async def test_broadcast_to_running_by_default(fake):
+    out = await srv.broadcast_command("say hi")
+    assert "成功 2" in out
+    assert sorted(fake.sent) == [("a", "say hi"), ("b", "say hi")]
+    # 停机的 c 不应被发到
+    assert all(sid != "c" for sid, _ in fake.sent)
 
 
-def _server(identifier: str) -> dict:
-    return {"attributes": {"identifier": identifier, "name": identifier}}
+@pytest.mark.asyncio
+async def test_broadcast_explicit_ids(fake):
+    out = await srv.broadcast_command("say hi", server_ids=["b", "c"])
+    assert "指定 2 台" in out
+    assert sorted(sid for sid, _ in fake.sent) == ["b", "c"]
 
 
-async def test_broadcast_readonly_denied(fake):
+@pytest.mark.asyncio
+async def test_broadcast_star_includes_offline(fake):
+    out = await srv.broadcast_command("say hi", server_ids=["*"])
+    assert "全部服务器" in out
+    assert sorted(sid for sid, _ in fake.sent) == ["a", "b", "c"]
+
+
+@pytest.mark.asyncio
+async def test_empty_command_rejected(fake):
+    out = await srv.broadcast_command("   ")
+    assert "指令为空" in out
+    assert fake.sent == []
+
+
+@pytest.mark.asyncio
+async def test_readonly_blocks_everything(fake):
     _bind(fake, readonly=True)
-    out = await srv.broadcast_message(["*"], "维护", confirm=True)
-    assert "只读模式" in out and "已拒绝" in out
+    out = await srv.broadcast_command("say hi")
+    assert "只读模式" in out
+    assert fake.sent == []
 
 
-async def test_broadcast_requires_confirm(fake):
-    _bind(fake)
-    fake.route("GET", "/api/client", _servers_payload([_server("abc")]))
-    out = await srv.broadcast_message(["*"], "维护")
-    assert "高危操作" in out and "confirm=True" in out
-    assert _no_post(fake, "command")  # 未发送
+@pytest.mark.parametrize("danger", ["stop", "kill", "restart", "op Steve", "ban Steve", "whitelist off"])
+@pytest.mark.asyncio
+async def test_dangerous_needs_confirm(fake, danger):
+    out = await srv.broadcast_command(danger)
+    assert "高危操作" in out
+    assert fake.sent == []
 
 
-async def test_broadcast_empty_message(fake):
-    _bind(fake)
-    out = await srv.broadcast_message(["*"], "   ", confirm=True)
-    assert "消息不能为空" in out
+@pytest.mark.asyncio
+async def test_dangerous_with_confirm_goes_through(fake):
+    out = await srv.broadcast_command("stop", confirm=True)
+    assert "成功 2" in out
+    assert len(fake.sent) == 2
 
 
-async def test_broadcast_no_servers(fake):
-    _bind(fake)
-    fake.route("GET", "/api/client", _servers_payload([]))
-    out = await srv.broadcast_message(["*"], "维护", confirm=True)
-    assert "没有可访问的服务器" in out
+@pytest.mark.parametrize("safe", ["say 大家好", "list", "whitelist add Steve", "time set day"])
+@pytest.mark.asyncio
+async def test_safe_command_no_confirm_needed(fake, safe):
+    out = await srv.broadcast_command(safe)
+    assert "高危" not in out
+    assert len(fake.sent) == 2
 
 
-async def test_broadcast_all_servers(fake):
-    _bind(fake)
-    fake.route("GET", "/api/client", _servers_payload([_server("abc"), _server("def")]))
-    fake.route("POST", "abc/command", {})
-    fake.route("POST", "def/command", {})
-    out = await srv.broadcast_message(["*"], "维护", confirm=True)
-    assert "已广播到 2 台" in out
-    assert "abc" in out and "def" in out
-    assert _posted(fake, "abc/command") == [{"command": "say 维护"}]
-    assert _posted(fake, "def/command") == [{"command": "say 维护"}]
+@pytest.mark.asyncio
+async def test_single_failure_does_not_block_others():
+    f = FakePanel({"a": "running", "b": "running"}, fail_ids={"a"})
+    _bind(f)
+    out = await srv.broadcast_command("say hi")
+    assert "成功 1" in out
+    assert "失败 1" in out
+    assert [sid for sid, _ in f.sent] == ["b"]
 
 
-async def test_broadcast_specific_ids(fake):
-    _bind(fake)
-    fake.route("GET", "/api/client", _servers_payload([_server("abc"), _server("def")]))
-    fake.route("POST", "abc/command", {})
-    out = await srv.broadcast_message(["abc"], "hi", confirm=True)
-    assert "已广播到 1 台" in out and "abc" in out and "def" not in out
-    assert _no_post(fake, "def/command")
+@pytest.mark.asyncio
+async def test_no_running_servers():
+    f = FakePanel({"x": "offline"})
+    _bind(f)
+    out = await srv.broadcast_command("say hi")
+    assert "没有 running" in out
+    assert f.sent == []
 
 
-async def test_broadcast_no_matching_target(fake):
-    _bind(fake)
-    fake.route("GET", "/api/client", _servers_payload([_server("abc")]))
-    out = await srv.broadcast_message(["nope"], "hi", confirm=True)
-    assert "指定的服务器都不存在或无权限" in out
+def test_dangerous_prefix_matcher():
+    assert srv._is_dangerous_broadcast("stop")
+    assert srv._is_dangerous_broadcast("  STOP  ")       # 大小写与空白
+    assert srv._is_dangerous_broadcast("op Steve")
+    assert srv._is_dangerous_broadcast("whitelist off")
+    # 不该误伤
+    assert not srv._is_dangerous_broadcast("say stop is coming")
+    assert not srv._is_dangerous_broadcast("list")
+    assert not srv._is_dangerous_broadcast("whitelist add Steve")
+    assert not srv._is_dangerous_broadcast("")
 
 
-async def test_broadcast_partial_failure(fake):
-    _bind(fake)
-    fake.route("GET", "/api/client", _servers_payload([_server("abc"), _server("def")]))
-    fake.route("POST", "abc/command", {})
-    # def 不发路由 → 请求 404 → 单台失败不阻断
-    out = await srv.broadcast_message(["*"], "hi", confirm=True)
-    assert "已广播到 1 台" in out and "abc" in out
-    assert "失败 1 台" in out and "def" in out
+# ---------------- CLI: pteropilot --broadcast ----------------
+
+def test_cli_missing_command_prints_usage(capsys):
+    rc = srv._run_broadcast(["--broadcast"])
+    assert rc == 2
+    assert "用法" in capsys.readouterr().err
 
 
-async def test_broadcast_skips_server_without_id(fake):
-    _bind(fake)
-    # 一台缺 identifier/id（无 sid）→ 跳过，不参与目标列表
-    fake.route(
-        "GET", "/api/client",
-        _servers_payload([
-            _server("abc"),
-            {"attributes": {"name": "no-id"}},
-        ]),
-    )
-    fake.route("POST", "abc/command", {})
-    out = await srv.broadcast_message(["*"], "hi", confirm=True)
-    assert "已广播到 1 台" in out and "abc" in out
-    assert "no-id" not in out
+def test_cli_rejects_option_as_command(capsys):
+    rc = srv._run_broadcast(["--broadcast", "--confirm"])
+    assert rc == 2
+    assert "用法" in capsys.readouterr().err
+
+
+def test_cli_broadcast_ok(fake, capsys):
+    rc = srv._run_broadcast(["--broadcast", "say hi"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "成功 2" in out
+
+
+def test_cli_servers_filter(fake, capsys):
+    rc = srv._run_broadcast(["--broadcast", "say hi", "--servers", "b"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert [sid for sid, _ in fake.sent] == ["b"]
+
+
+def test_cli_dangerous_needs_confirm(fake, capsys):
+    rc = srv._run_broadcast(["--broadcast", "stop"])
+    out = capsys.readouterr().out
+    assert rc == 3
+    assert "高危操作" in out
+    assert fake.sent == []
+
+
+def test_cli_dangerous_with_confirm(fake, capsys):
+    rc = srv._run_broadcast(["--broadcast", "stop", "--confirm"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert len(fake.sent) == 2
