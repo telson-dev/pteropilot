@@ -131,6 +131,39 @@ def save_state(path: Path, state: dict) -> None:
         pass
 
 
+def check_resource_thresholds(
+    res: dict, cpu_threshold: float = 0.0, memory_threshold: float = 0.0
+) -> list[str]:
+    """按阈值检查一台服务器的资源占用，返回超限说明（空列表 = 正常）。
+
+    只报「超了哪项、超多少」，不做趋势判断——瞬时尖峰交给 cooldown 去抖。
+    内存/磁盘用**使用率**而不是绝对值：面板给的是 memory_limit（0 表示不限制），
+    不限额时就跳过该项，而不是拿 0 去算出一个假百分比。
+    """
+    r = res.get("resources", res) or {}
+    out: list[str] = []
+
+    cpu = r.get("cpu_absolute")
+    if cpu_threshold > 0 and isinstance(cpu, (int, float)) and cpu >= cpu_threshold:
+        out.append(f"CPU {cpu:.1f}% ≥ 阈值 {cpu_threshold:g}%")
+
+    mem = r.get("memory_bytes")
+    mem_lim = r.get("memory_limit")
+    if (
+        memory_threshold > 0
+        and isinstance(mem, (int, float))
+        and isinstance(mem_lim, (int, float))
+        and mem_lim > 0
+    ):
+        pct = mem / mem_lim * 100
+        if pct >= memory_threshold:
+            out.append(
+                f"内存 {mem / 1024 / 1024:.0f} / {mem_lim / 1024 / 1024:.0f} MB"
+                f"（{pct:.0f}% ≥ 阈值 {memory_threshold:g}%）"
+            )
+    return out
+
+
 def build_alert_message(server_id: str, state: str, details: list[str]) -> str:
     """构造告警文本（钉钉/企业微信 text 消息兼容）。"""
     lines = [
@@ -197,6 +230,8 @@ async def scan_and_notify(
     confirm_count: int = 1,
     config_file: Path | None = None,
     dry_run: bool = False,
+    cpu_threshold: float = 0.0,
+    memory_threshold: float = 0.0,
 ) -> dict:
     """扫描全部可访问服务器，异常者逐台推送告警（webhook 和/或邮件）。
 
@@ -208,6 +243,8 @@ async def scan_and_notify(
     state_file: 冷却/确认状态持久化位置（默认 ~/.pteropilot/alerts_state.json）。
     smtp_*: 邮件通道（host+user+password+to 齐了才会发邮件；可与 webhook 同时使用）。
     dry_run: 演练模式——不真的推送/发邮件，也不写状态文件；返回里给出「将会通知哪些服务器」。
+    cpu_threshold / memory_threshold: >0 时启用资源阈值告警（CPU 百分比、内存使用率百分比）。
+        状态正常但资源超限的服务器也会告警，合成状态记为 ``high_load``。
     返回 {checked, abnormal, notified, planned, plans, suppressed, pending, errors}。
     """
     cfg = Config()
@@ -258,12 +295,21 @@ async def scan_and_notify(
                 wh_url = eff["webhook_url"] if eff["webhook"] else ""
                 mail_to = eff["mail_to"] if eff["email"] else ""
                 level, _hint = classify_state(state_now)
-                if level != "abnormal" or state_now not in abnormal_states:
+                state_bad = level == "abnormal" and state_now in abnormal_states
+                # 状态正常也不代表没事：CPU 打满、内存快满时同样值得叫人
+                res_bad: list[str] = []
+                if not state_bad and (cpu_threshold > 0 or memory_threshold > 0):
+                    res_bad = check_resource_thresholds(res, cpu_threshold, memory_threshold)
+                if not state_bad and not res_bad:
                     # 健康：清零连续确认计数
                     if state is not None and ident in state:
                         state[ident]["hits"] = 0
                     continue
                 abnormal += 1
+                if res_bad:
+                    # 合成状态：真实状态是 running，但对外说「负载异常」更准确
+                    # （否则标题会写成「状态异常（running）」，读起来矛盾）
+                    state_now = "high_load" if not state_bad else state_now
 
                 prev = (state or {}).get(ident, {}) if state else {}
                 hits = int(prev.get("hits") or 0) + 1
@@ -284,6 +330,8 @@ async def scan_and_notify(
                         continue
 
                 details = [f"健康度: {state_now}"]
+                if res_bad:
+                    details.extend(res_bad)
                 if include_log_signals:
                     try:
                         diag = await diagnose_crash_for(ident, client, timeout)
@@ -506,6 +554,18 @@ def main() -> None:
     parser.add_argument("--mail-from", default=os.environ.get("MAIL_FROM", ""), help="发件人邮箱（默认同 smtp-user）")
     parser.add_argument("--confirm-count", type=int, default=int(os.environ.get("CONFIRM_COUNT", "1")), help="连续确认阈值：同一服务器连续 N 次检测异常才推送（默认 1 = 立即推送；设 2+ 防瞬时抖动误报）")
     parser.add_argument("--config", default=None, help="按服务器级别配置路径（默认 ~/.pteropilot/alerts.json，存在即生效）")
+    parser.add_argument(
+        "--cpu",
+        type=float,
+        default=0.0,
+        help="CPU 阈值（%%）：超过即告警，0=关闭（默认）。状态正常也会告警",
+    )
+    parser.add_argument(
+        "--memory",
+        type=float,
+        default=0.0,
+        help="内存使用率阈值（%%）：超过即告警，0=关闭（默认）。不限额的服务器跳过",
+    )
     parser.add_argument("--dry-run", action="store_true", help="演练模式：只打印将会通知哪些服务器，不真的推送/发邮件、不写状态文件")
     parser.add_argument("--json", action="store_true", help="以 JSON 输出结果（机器可读，便于 cron/监控脚本解析）")
     parser.add_argument("--test", action="store_true", help="发一条测试通知验证渠道配置（webhook/邮件是否配对），不读服务器、不写状态")
@@ -542,6 +602,8 @@ def main() -> None:
             confirm_count=args.confirm_count,
             config_file=Path(args.config) if args.config else None,
             dry_run=args.dry_run,
+            cpu_threshold=args.cpu,
+            memory_threshold=args.memory,
         )
     )
     channels = []

@@ -27,7 +27,7 @@ PteroPilot 是一个开源 MCP server，让 Claude、Cursor 等 AI 助手直接�
 - 📁 文件管理：浏览、读取、写入、上传、重命名、删除、新建文件夹、一次性下载链接
 - 💾 备份：查看、创建、恢复、删除；批量概览与批量创建
 - 👥 玩家在线：从控制台日志解析进出（兼容原版/Paper/Spigot/Forge/Fabric 中英文格式）
-- 🚨 崩服检测与告警：状态级健康检查 + 日志级崩溃信号（OOM/JVM/异常退出/致命错误），可配 webhook/邮件通知、冷却去重、连续确认防误报，`~/.pteropilot/alerts.json` 按服务器调灵敏度
+- 🚨 崩服检测与告警：状态级健康检查、CPU/内存阈值 + 日志级崩溃信号（OOM/JVM/异常退出/致命错误），可配 webhook/邮件通知、冷却去重、连续确认防误报，`~/.pteropilot/alerts.json` 按服务器调灵敏度
 - ⚡ 批量操作：一次看全部状态摘要，批量开/停/重启，批量备份概览/创建
 - 🔒 安全：只读模式 + 高危操作二次确认，API Key 永不离开本机
 
@@ -149,7 +149,7 @@ pteropilot --broadcast "say 马上回来" --in 5m                    # 等 5 分
 
 ```bash
 pteropilot --version
-# 输出：pteropilot v0.2.31（45 个 MCP 工具）
+# 输出：pteropilot v0.2.32（45 个 MCP 工具）
 ```
 
 **工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），
@@ -175,6 +175,9 @@ PANEL_URL=https://panel.example.com PANEL_API_KEY=ptlc_xxx \
 
 # 先验证通知渠道配没配对（不读服务器、不写状态）
 pteropilot-alerts --webhook "..." --test
+
+# 服务器还活着但快撑不住时也通知（不只是挂了才叫）
+pteropilot-alerts --webhook "..." --cpu 85 --memory 90
 
 # 卡在冷却期 / 调完灵敏度想重新计数：清空状态
 pteropilot-alerts --reset
@@ -258,7 +261,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.31**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.32**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 

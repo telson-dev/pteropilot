@@ -27,7 +27,7 @@ No panel login, no digging through logs — just ask.
 - 📁 Files: browse, read, write, upload, rename, delete, create folders, one-time download links
 - 💾 Backups: list, create, restore, delete; batch overview and batch-create across servers
 - 👥 Who is online: parse join/leave lines from the console (Minecraft/Paper/Spigot/Forge/Fabric, EN & CN)
-- 🚨 Crash detection & alerts: state-level health checks + log-level crash signals (OOM/JVM/exit/fatal), optional webhook/email alerts with cooldown dedup, confirm-count anti-flap, and per-server tuning via `~/.pteropilot/alerts.json`
+- 🚨 Crash detection & alerts: state-level health checks, CPU/memory thresholds, + log-level crash signals (OOM/JVM/exit/fatal), optional webhook/email alerts with cooldown dedup, confirm-count anti-flap, and per-server tuning via `~/.pteropilot/alerts.json`
 - ⚡ Batch ops: one-shot status summary, batch start/stop/restart, batch backup overview/create
 - 🔒 Safety: read-only mode and explicit confirmation for dangerous actions; your API key never leaves your machine
 
@@ -147,7 +147,7 @@ refusals carry `reason` (`readonly` / `need_confirm` / `empty_command` / `no_run
 
 ```bash
 pteropilot --version
-# pteropilot v0.2.31 (45 MCP tools)
+# pteropilot v0.2.32 (45 MCP tools)
 ```
 
 **If the tool count looks low you are on an old build.** PyPI may lag behind
@@ -277,7 +277,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.31** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.32** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 
@@ -296,3 +296,18 @@ MIT
 ---
 
 _a [telson](https://telson.dev) project_
+
+
+## Alert on load, not just on death
+
+`pteropilot-alerts` originally only fired when a server was offline/error/suspended.
+A server that is *running* but pegged at 99% CPU used to look perfectly healthy:
+
+```bash
+pteropilot-alerts --webhook "..." --cpu 85 --memory 90
+```
+
+CPU is an absolute percentage; memory is a **usage ratio** (`memory_bytes / memory_limit`).
+Servers without a memory limit are skipped rather than scored against zero.
+Hitting the threshold exactly counts as over. Default `0` disables both, so the
+behaviour is unchanged unless you ask for it.
