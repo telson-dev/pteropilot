@@ -18,6 +18,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
+from . import playerlog
 from .client import POWER_SIGNALS, PanelClient, redact
 from .config import Config, key_role_warnings
 
@@ -678,7 +679,10 @@ async def list_players(server_id: str) -> str:
     players = await panel.online_players(server_id)
     if not players:
         return "(当前没有检测到在线玩家，或日志里没有玩家进出记录)"
-    return "当前在线玩家 (" + str(len(players)) + " 人):\n" + "\n".join(f"- {p}" for p in players)
+    # 顺手记一条本地采样，供 player_stats 看趋势；记录失败不影响本次返回
+    recorded = playerlog.record(server_id, players)
+    tail = "\n\n（已记录本次采样，可用 player_stats 查看活跃趋势）" if recorded else ""
+    return "当前在线玩家 (" + str(len(players)) + " 人):\n" + "\n".join(f"- {p}" for p in players) + tail
 
 
 @mcp.tool()
@@ -706,6 +710,22 @@ async def batch_list_players(server_ids: list[str]) -> str:
 
     results = await asyncio.gather(*(_one(sid) for sid in target_ids))
     return "\n\n".join(results)
+
+
+@mcp.tool()
+async def player_stats(server_id: str, days: int = 7) -> str:
+    """查看玩家活跃历史：谁最常来、出现在哪几个时段。
+
+    数据来源是**本机记录**（每次 list_players 会记一条采样），纯本地文件
+    `~/.pteropilot/playerlog/`，不上传任何数据。采样越频繁，时长估算越接近真实。
+    与 list_players 同口径：在线名单本身由控制台日志推断，不是权威在线时长。
+
+    ``days`` 是回看天数（默认 7，最少 1 天）。
+    """
+    if days < 1:
+        return "⛔ days 至少为 1。"
+    data = playerlog.stats(server_id, days=days)
+    return playerlog.format_stats(server_id, data, days=days)
 
 
 @mcp.tool()
