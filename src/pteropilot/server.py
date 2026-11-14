@@ -14,6 +14,8 @@ import base64
 import json
 import os
 import sys
+import time
+from datetime import datetime, timedelta
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -1761,6 +1763,116 @@ def _run_doctor(skip_network: bool = False) -> int:
     return 1 if problems else 0
 
 
+# 计划执行：--in / --at 的上限。再长就该交给 cron/systemd，而不是让进程干等。
+_MAX_WAIT_SECONDS = 24 * 3600
+
+
+def _parse_duration(raw: str) -> float:
+    """``5m`` / ``300s`` / ``2h`` / ``1d`` / ``90`` → 秒。
+
+    单位可省略（当秒）；只接受一个单位后缀，不玩 ``1h30m`` 这种组合，
+    免得算错半天才发现。
+    """
+    s = (raw or "").strip().lower()
+    if not s:
+        raise ValueError("空的时间间隔")
+    mult = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    unit = s[-1]
+    if unit in mult:
+        num_part, m = s[:-1], mult[unit]
+    else:
+        num_part, m = s, 1
+    try:
+        n = float(num_part)
+    except ValueError as exc:
+        raise ValueError(f"看不懂的时间间隔: {raw}") from exc
+    if n < 0:
+        raise ValueError("时间间隔不能为负")
+    return n * m
+
+
+def _seconds_until_clock(raw: str, now: datetime | None = None) -> float:
+    """``03:00`` / ``3:00`` / ``03:00:30`` → 距离**下一个**该时刻的秒数。
+
+    已经过了今天这个点就顺延到明天；返回 0 表示正好到点（极少见）。
+    """
+    s = (raw or "").strip()
+    parts = s.split(":")
+    if len(parts) not in (2, 3):
+        raise ValueError(f"看不懂的时刻: {raw}（要 HH:MM 或 HH:MM:SS）")
+    try:
+        nums = [int(p) for p in parts]
+    except ValueError as exc:
+        raise ValueError(f"看不懂的时刻: {raw}") from exc
+    hh, mm = nums[0], nums[1]
+    ss = nums[2] if len(parts) == 3 else 0
+    if not (0 <= hh <= 23 and 0 <= mm <= 59 and 0 <= ss <= 59):
+        raise ValueError(f"时刻超出范围: {raw}")
+
+    base = now or datetime.now()
+    target = base.replace(hour=hh, minute=mm, second=ss, microsecond=0)
+    if target <= base:
+        target += timedelta(days=1)
+    return (target - base).total_seconds()
+
+
+def _scheduled_delay(argv: list[str]) -> tuple[float | None, str | None]:
+    """从 argv 里取 ``--in`` / ``--at``，返回 (等待秒数, 错误说明)。
+
+    两个都给算用法错误（语义冲突，不猜用户想哪个）。
+    """
+    has_in = "--in" in argv
+    has_at = "--at" in argv
+    if has_in and has_at:
+        return None, "--in 和 --at 只能给一个"
+    try:
+        if has_in:
+            j = argv.index("--in")
+            raw = argv[j + 1] if j + 1 < len(argv) else ""
+            if not raw or raw.startswith("--"):
+                return None, "--in 后面要跟时间间隔（如 5m / 300s / 2h）"
+            return _parse_duration(raw), None
+        if has_at:
+            j = argv.index("--at")
+            raw = argv[j + 1] if j + 1 < len(argv) else ""
+            if not raw or raw.startswith("--"):
+                return None, "--at 后面要跟时刻（如 03:00）"
+            return _seconds_until_clock(raw), None
+    except ValueError as exc:
+        return None, str(exc)
+    return None, None
+
+
+def _wait_until(delay: float, fmt: str) -> bool:
+    """等到点再执行；返回 True 表示该继续执行，False 表示被取消。
+
+    刻意用同步 ``time.sleep``：CLI 是一次性进程，没有别的事要干，
+    异步等待只会多一层嵌套。Ctrl+C 能中断 sleep，会如实返回取消。
+    """
+    if delay <= 0:
+        return True
+    if delay > _MAX_WAIT_SECONDS:
+        hours = delay / 3600
+        print(
+            f"✗ 要等 {hours:.1f} 小时（上限 24 小时）。这么长请交给 cron / systemd，"
+            "而不是让进程干等。",
+            file=sys.stderr,
+        )
+        return False
+    when = datetime.now() + timedelta(seconds=delay)
+    print(
+        f"⏳ 将在 {when.strftime('%Y-%m-%d %H:%M:%S')} 执行"
+        f"（{delay:.0f} 秒后，Ctrl+C 取消）: {fmt}",
+        file=sys.stderr,
+    )
+    try:
+        time.sleep(delay)
+    except KeyboardInterrupt:
+        print("\n已取消（等待期间收到 Ctrl+C）。", file=sys.stderr)
+        return False
+    return True
+
+
 _BROADCAST_USAGE = (
     '用法: pteropilot --broadcast "say 服务器 5 分钟后重启" '
     "[--servers a,b] [--confirm] [--json]"
@@ -1793,6 +1905,15 @@ def _run_broadcast(argv: list[str]) -> int:
 
     confirm = "--confirm" in argv
     as_json = "--json" in argv
+
+    # --in / --at：等到点再发（省得为了「5 分钟后再发」写一圈 shell sleep）
+    delay, err = _scheduled_delay(argv)
+    if err:
+        print(f"✗ {err}", file=sys.stderr)
+        return 2
+    if delay is not None and not _wait_until(delay, f'broadcast "{command}"'):
+        return 4
+
     data = asyncio.run(_broadcast_data(command, ids, confirm))
 
     if as_json:
@@ -1807,7 +1928,10 @@ def _run_broadcast(argv: list[str]) -> int:
     return 0 if data["failed"] == 0 else 1
 
 
-_POWER_USAGE = '用法: pteropilot --power <start|stop|restart|kill> --servers a,b [--confirm] [--json]'
+_POWER_USAGE = (
+    '用法: pteropilot --power <start|stop|restart|kill> --servers a,b '
+    '[--confirm] [--json] [--in 5m | --at 03:00]'
+)
 
 
 def _run_power(argv: list[str]) -> int:
@@ -1841,6 +1965,14 @@ def _run_power(argv: list[str]) -> int:
 
     confirm = "--confirm" in argv
     as_json = "--json" in argv
+
+    delay, err = _scheduled_delay(argv)
+    if err:
+        print(f"✗ {err}", file=sys.stderr)
+        return 2
+    if delay is not None and not _wait_until(delay, f"power {signal} -> {','.join(ids)}"):
+        return 4
+
     data = asyncio.run(_power_data(ids, signal, confirm))
 
     if as_json:

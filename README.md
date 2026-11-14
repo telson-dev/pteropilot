@@ -128,7 +128,14 @@ pteropilot --power start   --servers smp,creative      # start is safe
 pteropilot --power restart --servers smp --confirm     # stop/restart/kill need --confirm
 pteropilot --power stop    --servers "*" --confirm     # "*" = every server
 pteropilot --power restart --servers smp --confirm --json
+pteropilot --power restart --servers smp --confirm --at 03:00   # wait until 03:00
+pteropilot --broadcast "say brb" --in 5m                        # wait 5 minutes
 ```
+
+`--in` / `--at` make the process wait before acting — handy when a cron entry
+cannot express "at 03:00 only if it is currently running". Wait is capped at
+24 hours (anything longer belongs in cron/systemd); Ctrl+C during the wait
+cancels and exits with code `4`, sending nothing.
 
 Same logic as the `batch_power` tool. `--servers` is required (a power signal is a
 write; it will not guess a scope). Exit codes match `--broadcast`.
@@ -140,7 +147,7 @@ refusals carry `reason` (`readonly` / `need_confirm` / `empty_command` / `no_run
 
 ```bash
 pteropilot --version
-# pteropilot v0.2.30 (45 MCP tools)
+# pteropilot v0.2.31 (45 MCP tools)
 ```
 
 **If the tool count looks low you are on an old build.** PyPI may lag behind
@@ -270,7 +277,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.30** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.31** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

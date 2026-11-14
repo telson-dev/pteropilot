@@ -134,7 +134,13 @@ pteropilot --power start   --servers smp,creative      # start 免确认
 pteropilot --power restart --servers smp --confirm     # stop/restart/kill 要确认
 pteropilot --power stop    --servers "*" --confirm     # "*" = 全部服务器
 pteropilot --power restart --servers smp --confirm --json
+pteropilot --power restart --servers smp --confirm --at 03:00   # 等到 3 点
+pteropilot --broadcast "say 马上回来" --in 5m                    # 等 5 分钟
 ```
+
+`--in` / `--at` 让进程**等到点再执行**——有些「3 点重启」的需求 cron 表达不了
+（比如要等面板里某件事先完成）。等待上限 24 小时（更长的请交给 cron/systemd）；
+等待期间 Ctrl+C 会取消并以退出码 `4` 退出，一个字都不会发。
 
 和 `batch_power` 工具走同一份逻辑。`--servers` 必填（电源是写操作，不替你猜范围）。
 退出码与 `--broadcast` 一致。
@@ -143,7 +149,7 @@ pteropilot --power restart --servers smp --confirm --json
 
 ```bash
 pteropilot --version
-# 输出：pteropilot v0.2.30（45 个 MCP 工具）
+# 输出：pteropilot v0.2.31（45 个 MCP 工具）
 ```
 
 **工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），
@@ -252,7 +258,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.30**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.31**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 
