@@ -1,6 +1,6 @@
 [project]
 name = "pteropilot"
-version = "0.2.26"
+version = "0.2.27"
 description = "MCP server that lets AI agents manage game servers on Pterodactyl / Pelican panels"
 readme = "README.md"
 requires-python = ">=3.12"
