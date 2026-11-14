@@ -127,11 +127,23 @@ pteropilot --broadcast "say hi" --json              # 结构化输出，给脚�
 配置是否齐全、地址是否被自动规范化（带 `/api` 会被剥掉）、密钥前缀是否用错
 （`ptla_` 应用密钥不能给核心工具用）、面板连通状态与 401/403/404 的具体含义。
 
+## 从命令行发电源信号
+
+```bash
+pteropilot --power start   --servers smp,creative      # start 免确认
+pteropilot --power restart --servers smp --confirm     # stop/restart/kill 要确认
+pteropilot --power stop    --servers "*" --confirm     # "*" = 全部服务器
+pteropilot --power restart --servers smp --confirm --json
+```
+
+和 `batch_power` 工具走同一份逻辑。`--servers` 必填（电源是写操作，不替你猜范围）。
+退出码与 `--broadcast` 一致。
+
 ## 装好了先自检版本
 
 ```bash
 pteropilot --version
-# 输出：pteropilot v0.2.29（45 个 MCP 工具）
+# 输出：pteropilot v0.2.30（45 个 MCP 工具）
 ```
 
 **工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），
@@ -240,7 +252,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.29**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.30**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 

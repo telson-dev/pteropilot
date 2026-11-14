@@ -990,6 +990,92 @@ async def power_signal(server_id: str, signal: str, confirm: bool = False) -> st
     return f"✅ 已向 {server_id} 发送电源信号: {signal}"
 
 
+async def _power_data(
+    server_ids: list[str],
+    signal: str,
+    confirm: bool = False,
+) -> dict:
+    """批量电源的结构化结果（MCP 工具与 CLI ``--power`` 共用）。
+
+    ``status``：``ok`` 已执行 / ``refused`` 被拦截（只读、非法信号、缺 confirm、无目标）。
+    被拦截时 ``reason`` 说明原因，``results`` 为空。
+    """
+    data: dict = {
+        "signal": signal,
+        "status": "ok",
+        "reason": None,
+        "scope": None,
+        "total": 0,
+        "ok": 0,
+        "failed": 0,
+        "results": [],
+    }
+
+    denied = _denied_if_readonly()
+    if denied:
+        data.update(status="refused", reason="readonly")
+        return data
+    if not server_ids:
+        data.update(status="refused", reason="no_targets")
+        return data
+    if signal not in POWER_SIGNALS:
+        data.update(status="refused", reason="bad_signal")
+        return data
+
+    target_ids = await _resolve_target_ids(server_ids)
+    if not target_ids:
+        data.update(status="refused", reason="no_servers")
+        return data
+
+    all_servers = server_ids == ["*"]
+    data["scope"] = "all" if all_servers else "explicit"
+
+    # 全量操作任何信号都要确认（防止误启动全部服务器）；
+    # 显式列表时只有停服类信号要确认，start 免确认。
+    if signal in ("stop", "restart", "kill") or all_servers:
+        if not confirm:
+            data.update(status="refused", reason="need_confirm")
+            return data
+
+    async def _apply(sid: str) -> dict:
+        try:
+            await panel.power(sid, signal)
+            return {"id": sid, "ok": True, "error": None}
+        except Exception as exc:  # noqa: BLE001 - 单台失败要如实带回来
+            return {"id": sid, "ok": False, "error": type(exc).__name__}
+
+    results = list(await asyncio.gather(*(_apply(sid) for sid in target_ids)))
+    data["results"] = results
+    data["total"] = len(results)
+    data["ok"] = sum(1 for r in results if r["ok"])
+    data["failed"] = data["total"] - data["ok"]
+    return data
+
+
+def _format_power(data: dict) -> str:
+    """把结构化电源结果渲染成人看的文本。"""
+    reason_text = {
+        "readonly": "⛔ 当前为只读模式（PANEL_READONLY=1），已拒绝该操作。",
+        "no_targets": "(未指定任何服务器)",
+        "bad_signal": f"非法信号 {(data.get('signal') or '')}，可选: {', '.join(POWER_SIGNALS)}",
+        "no_servers": "(没有可访问的服务器)",
+        "need_confirm": "⚠️ 该电源操作属于高危操作，已拦截。确认无误后请带 confirm=True 重新调用。",
+    }
+    if data["status"] != "ok":
+        return reason_text.get(data["reason"] or "", "(未执行)")
+
+    # 保持和重构前完全一致的文案（既有测试锁住了这个格式）
+    header = (
+        f"批量 {data['signal']}：共 {data['total']} 台，"
+        f"成功 {data['ok']} 台、失败 {data['failed']} 台："
+    )
+    lines = [
+        f"- {r['id']} | " + (f"✅ 已发送 {data['signal']}" if r["ok"] else f"❌ 失败（{r['error']}）")
+        for r in data["results"]
+    ]
+    return header + ("\n" + "\n".join(lines) if lines else "")
+
+
 @mcp.tool()
 async def batch_power(server_ids: list[str], signal: str, confirm: bool = False) -> str:
     """批量控制一组服务器的电源（Roadmap「批量开服」写路径收尾）。
@@ -1003,46 +1089,10 @@ async def batch_power(server_ids: list[str], signal: str, confirm: bool = False)
       信号都必须 confirm=True**（即使是 start，防止误启动全部服务器）；
     - 显式列表时 stop/restart/kill 需整体 confirm=True（一次确认覆盖整批，start 免确认）；
     - 逐台 apply，单台失败（超时/无权限/面板报错）单独标注、不阻断其余服务器。
+
+    CLI 里 ``pteropilot --power restart --servers smp --confirm`` 走同一份逻辑。
     """
-    denied = _denied_if_readonly()
-    if denied:
-        return denied
-    if not server_ids:
-        return "(未指定任何服务器)"
-    if signal not in POWER_SIGNALS:
-        return f"非法信号 {signal}，可选: {', '.join(POWER_SIGNALS)}"
-    target_ids = await _resolve_target_ids(server_ids)
-    if not target_ids:
-        return "(没有可访问的服务器)"
-    all_servers = server_ids == ["*"]
-    if signal in ("stop", "restart", "kill") or all_servers:
-        what = f"批量 {signal}（{'全部' if all_servers else ''}{len(target_ids)} 台服务器）"
-        blocked = _need_confirm(confirm, what)
-        if blocked:
-            return blocked
-
-    ok = 0
-    failed = 0
-    lines: list[str] = []
-
-    async def _apply(sid: str) -> str:
-        try:
-            await panel.power(sid, signal)
-            return f"- {sid} | ✅ 已发送 {signal}"
-        except Exception:
-            # 单台失败不阻断整体，标注后继续。
-            return f"- {sid} | ❌ 失败（无权限/超时/面板报错）"
-
-    # 并发执行（gather 保序）：面板无批量端点，但并发调用显著缩短整批耗时。
-    for line in await asyncio.gather(*(_apply(sid) for sid in target_ids)):
-        lines.append(line)
-        if "✅" in line:
-            ok += 1
-        else:
-            failed += 1
-
-    header = f"批量 {signal}：共 {len(target_ids)} 台，成功 {ok} 台、失败 {failed} 台："
-    return header + "\n" + "\n".join(lines)
+    return _format_power(await _power_data(server_ids, signal, confirm))
 
 
 # 广播时视为高危的指令（会关服 / 改权限 / 踢人 / 关白名单）。
@@ -1757,6 +1807,52 @@ def _run_broadcast(argv: list[str]) -> int:
     return 0 if data["failed"] == 0 else 1
 
 
+_POWER_USAGE = '用法: pteropilot --power <start|stop|restart|kill> --servers a,b [--confirm] [--json]'
+
+
+def _run_power(argv: list[str]) -> int:
+    """``pteropilot --power restart``：不启动 MCP server，批量发电源信号后退出。
+
+    与 ``--broadcast`` 对称，给 cron / 计划任务用。stop/restart/kill 以及
+    ``--servers "*"``（全部服务器）必须 ``--confirm``。
+    """
+    try:
+        i = argv.index("--power")
+        signal = argv[i + 1] if i + 1 < len(argv) else ""
+    except ValueError:
+        signal = ""
+    if not signal or signal.startswith("--"):
+        print(_POWER_USAGE, file=sys.stderr)
+        return 2
+
+    ids: list[str] | None = None
+    if "--servers" in argv:
+        j = argv.index("--servers")
+        if j + 1 < len(argv) and not argv[j + 1].startswith("--"):
+            raw = [x.strip() for x in argv[j + 1].split(",") if x.strip()]
+            ids = raw or None
+    if ids is None:
+        # 电源是写操作，不给目标时不像广播那样猜范围，直接要求显式指定
+        print(
+            _POWER_USAGE + '\n（--servers 必填；要作用于全部服务器请写 --servers "*"）',
+            file=sys.stderr,
+        )
+        return 2
+
+    confirm = "--confirm" in argv
+    as_json = "--json" in argv
+    data = asyncio.run(_power_data(ids, signal, confirm))
+
+    if as_json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(_format_power(data))
+
+    if data["status"] == "refused":
+        return 3
+    return 0 if data["failed"] == 0 else 1
+
+
 def main() -> None:
     # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     argv = sys.argv[1:]
@@ -1774,6 +1870,14 @@ def main() -> None:
             print(f"pteropilot --broadcast 需要面板配置：{exc}", file=sys.stderr)
             return sys.exit(1)
         sys.exit(_run_broadcast(argv))
+    # --power：批量电源操作后退出（不启动 server）
+    if "--power" in argv:
+        try:
+            config.validate()
+        except ValueError as exc:
+            print(f"pteropilot --power 需要面板配置：{exc}", file=sys.stderr)
+            return sys.exit(1)
+        sys.exit(_run_power(argv))
     try:
         config.validate()
     except ValueError as exc:
