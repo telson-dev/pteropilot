@@ -260,8 +260,11 @@ async def test_cooldown_expiry_notifies_again(fake, env_panel, monkeypatch, tmp_
 
     state_file = tmp_path / "state.json"
     await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
-    # 把状态文件里的时间改到很久以前 → 冷却过期 → 再次推送
-    alerts.save_state(state_file, {"s1": {"state": "offline", "ts": time.time() - 3600}})
+    # 把状态文件里的时间改到很久以前 → 冷却过期 → 再次推送。
+    # 用 7200 而不是 3600：冷却正好是 60 分钟，卡在 3600 边界上时
+    # 一次浮点误差或几毫秒调度延迟就能让 `elapsed < 3600` 翻转，
+    # 这个测试因此偶发失败过。余量给足，测的是「过期会再推」这件事本身。
+    alerts.save_state(state_file, {"s1": {"state": "offline", "ts": time.time() - 7200}})
     second = await alerts.scan_and_notify("https://hook.example/send", cooldown_minutes=60, state_file=state_file)
     assert second["notified"] == 1
     assert len(notified) == 2

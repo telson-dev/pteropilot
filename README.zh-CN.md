@@ -145,11 +145,22 @@ pteropilot --broadcast "say 马上回来" --in 5m                    # 等 5 分
 和 `batch_power` 工具走同一份逻辑。`--servers` 必填（电源是写操作，不替你猜范围）。
 退出码与 `--broadcast` 一致。
 
+## 不开 AI 也能看状态
+
+```bash
+pteropilot --status              # 全部服务器：状态、健康度、CPU、内存
+pteropilot --status smp          # 单台，额外读日志推断在线玩家数
+pteropilot --status --json       # 结构化输出
+```
+
+退出码：全部健康才是 `0`，否则 `1`——可以直接当 cron 健康检查用。
+单台查询失败会显示 `⚠`，不会盖住其他服务器。
+
 ## 装好了先自检版本
 
 ```bash
 pteropilot --version
-# 输出：pteropilot v0.2.32（45 个 MCP 工具）
+# 输出：pteropilot v0.2.33（45 个 MCP 工具）
 ```
 
 **工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），
@@ -261,7 +272,7 @@ uv run pteropilot
 
 ## 状态与路线图
 
-当前发布版：**v0.2.32**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
+当前发布版：**v0.2.33**（见 [CHANGELOG](CHANGELOG.md)）。下一步计划见 [ROADMAP](ROADMAP.md)；完整安装指南、两款面板配置示例与 FAQ 见 [docs/](docs/README.md)。
 
 ## 安全说明
 

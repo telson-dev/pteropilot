@@ -132,6 +132,17 @@ pteropilot --power restart --servers smp --confirm --at 03:00   # wait until 03:
 pteropilot --broadcast "say brb" --in 5m                        # wait 5 minutes
 ```
 
+## Look at your servers without an AI client
+
+```bash
+pteropilot --status              # every server: state, health, CPU, memory
+pteropilot --status smp          # one server, plus online players (from console log)
+pteropilot --status --json       # machine-readable
+```
+
+Exit code `0` only when every server is healthy, `1` otherwise — usable as a cron
+health check. A single failing server is listed as `⚠` and does not hide the rest.
+
 `--in` / `--at` make the process wait before acting — handy when a cron entry
 cannot express "at 03:00 only if it is currently running". Wait is capped at
 24 hours (anything longer belongs in cron/systemd); Ctrl+C during the wait
@@ -147,7 +158,7 @@ refusals carry `reason` (`readonly` / `need_confirm` / `empty_command` / `no_run
 
 ```bash
 pteropilot --version
-# pteropilot v0.2.32 (45 MCP tools)
+# pteropilot v0.2.33 (45 MCP tools)
 ```
 
 **If the tool count looks low you are on an old build.** PyPI may lag behind
@@ -277,7 +288,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.32** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.33** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

@@ -1985,6 +1985,142 @@ def _run_power(argv: list[str]) -> int:
     return 0 if data["failed"] == 0 else 1
 
 
+_STATUS_USAGE = "用法: pteropilot --status [服务器标识] [--json]"
+
+
+def _fmt_mb(x: Any) -> str:
+    """字节 → MiB；非数值给 '?'。"""
+    return f"{x / 1024 / 1024:.0f}M" if isinstance(x, (int, float)) and x else "-"
+
+
+async def _status_data(server_id: str | None = None) -> dict:
+    """服务器状态的结构化结果（CLI ``--status`` 用）。
+
+    不复用 ``batch_get_status``：那个只给状态与健康度，命令行最想看的
+    CPU / 内存 / 玩家数它没有。这里直接拉 resources，一次拿全。
+    """
+    if server_id:
+        res = await panel.resources(server_id)
+        state = res.get("current_state", "?")
+        r = res.get("resources", res) or {}
+        level, _ = classify_state(state)
+        try:
+            players = await panel.online_players(server_id)
+            players_n: int | None = len(players)
+        except Exception:
+            players_n = None
+        return {
+            "servers": [
+                {
+                    "id": server_id,
+                    "name": server_id,
+                    "state": state,
+                    "health": level,
+                    "cpu": r.get("cpu_absolute"),
+                    "memory_bytes": r.get("memory_bytes"),
+                    "memory_limit": r.get("memory_limit"),
+                    "disk_bytes": r.get("disk_bytes"),
+                    "players": players_n,
+                }
+            ],
+            "errors": [],
+        }
+
+    servers = await panel.client_servers()
+    rows: list[dict] = []
+    errors: list[str] = []
+
+    async def _one(s: dict) -> None:
+        a = _attrs(s)
+        ident = str(a.get("identifier") or a.get("uuid") or "?")
+        name = _name(a)
+        try:
+            res = await panel.resources(ident)
+            state = res.get("current_state", "?")
+            r = res.get("resources", res) or {}
+            level, _ = classify_state(state)
+            rows.append(
+                {
+                    "id": ident,
+                    "name": name,
+                    "state": state,
+                    "health": level,
+                    "cpu": r.get("cpu_absolute"),
+                    "memory_bytes": r.get("memory_bytes"),
+                    "memory_limit": r.get("memory_limit"),
+                    "disk_bytes": r.get("disk_bytes"),
+                    "players": None,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - 单台失败不阻断整体
+            errors.append(f"{ident}: {type(exc).__name__}")
+
+    await asyncio.gather(*(_one(s) for s in servers))
+    rows.sort(key=lambda x: x["id"])
+    return {"servers": rows, "errors": errors}
+
+
+def _format_status(data: dict) -> str:
+    """把状态结果排成表（等宽，终端里好读）。"""
+    rows = data["servers"]
+    if not rows and not data["errors"]:
+        return "(没有可访问的服务器)"
+
+    icon = {"healthy": "🟢", "transitional": "🟡", "abnormal": "🔴", "unknown": "⚪"}
+    header = f"{'标识':<18} {'名称':<20} {'状态':<12} {'CPU':>7} {'内存':>12} {'玩家':>5}"
+    lines = [header, "-" * 78]
+    for r in rows:
+        mem = _fmt_mb(r["memory_bytes"])
+        lim = r["memory_limit"]
+        mem_s = f"{mem}/{_fmt_mb(lim)}" if isinstance(lim, (int, float)) and lim else mem
+        cpu = f"{r['cpu']:.1f}%" if isinstance(r["cpu"], (int, float)) else "-"
+        players = "-" if r["players"] is None else str(r["players"])
+        name = (r["name"] or "")[:20]
+        lines.append(
+            f"{r['id'][:18]:<18} {name:<20} "
+            f"{icon.get(r['health'], '⚪')} {r['state'][:10]:<10} {cpu:>7} {mem_s:>12} {players:>5}"
+        )
+    for e in data["errors"]:
+        lines.append(f"  ⚠ {e}")
+    return "\n".join(lines)
+
+
+def _run_status(argv: list[str]) -> int:
+    """``pteropilot --status [标识]``：不开 MCP 客户端，直接看服务器状态。
+
+    不给标识时列出全部（并发拉取，单台失败单独标注不阻断）；
+    给标识时额外读一次日志推断在线玩家数。
+    """
+    sid: str | None = None
+    if "--status" in argv:
+        i = argv.index("--status")
+        if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            sid = argv[i + 1]
+
+    as_json = "--json" in argv
+    try:
+        config.validate()
+    except ValueError as exc:
+        print(f"pteropilot --status 需要面板配置：{exc}", file=sys.stderr)
+        return 1
+
+    try:
+        data = asyncio.run(_status_data(sid))
+    except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊一屏堆栈
+        print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+        return 1
+
+    if as_json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(_format_status(data))
+
+    if data["errors"]:
+        return 1
+    # 有异常状态的服务器也算非零，方便脚本/cron 判断
+    return 0 if all(r["health"] == "healthy" for r in data["servers"]) else 1
+
+
 def main() -> None:
     # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     argv = sys.argv[1:]
@@ -2010,6 +2146,9 @@ def main() -> None:
             print(f"pteropilot --power 需要面板配置：{exc}", file=sys.stderr)
             return sys.exit(1)
         sys.exit(_run_power(argv))
+    # --status：命令行看状态后退出（不启动 server）
+    if "--status" in argv:
+        sys.exit(_run_status(argv))
     try:
         config.validate()
     except ValueError as exc:
