@@ -41,6 +41,16 @@ PTEROPILOT_CONCURRENCY=4  pteropilot --status   # gentler on a small panel
 PTEROPILOT_CONCURRENCY=16 pteropilot --status   # faster when the panel is beefy
 ```
 
+Transient failures are retried automatically, **but only for read-only calls**.
+A `429`, `502`, `503`, `504`, or a dropped connection on a GET is retried up to
+two more times with exponential backoff and jitter, honouring `Retry-After`
+(capped at 5s). Writes are never retried: re-sending a rate-limited `stop`, or a
+`delete` whose response was lost, is worse than showing you the error.
+
+```bash
+PTEROPILOT_RETRIES=0 pteropilot --status   # disable retries entirely
+```
+
 ## Install
 
 Requires Python 3.12+. Run in one line with [`uv`](https://docs.astral.sh/uv/):

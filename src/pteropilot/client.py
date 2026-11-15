@@ -9,12 +9,60 @@ list 端点统一返回 data 数组；httpx 在 4xx/5xx 时抛出 HTTPStatusErro
 
 from __future__ import annotations
 
+import asyncio
+import os
+import random
 import re
 from typing import Any
 
 import httpx
 
 from .config import Config
+
+# 只对**只读**请求自动重试。
+# 写操作（post/put/delete）绝不重试：一次被限流的 `stop` 再补发一次，
+# 或者一次超时的 `delete` 重发，后果比让用户看到错误严重得多。
+_RETRY_METHODS = frozenset({"get"})
+_RETRY_STATUS = frozenset({429, 502, 503, 504})
+_MAX_RETRY_DELAY = 5.0
+
+
+def _read_retries() -> int:
+    """额外重试次数，默认 2 次（合计最多 3 次请求）。"""
+    raw = os.environ.get("PTEROPILOT_RETRIES", "").strip()
+    if not raw:
+        return 2
+    try:
+        return max(0, min(5, int(raw)))
+    except ValueError:
+        return 2
+
+
+def _read_base_delay() -> float:
+    """指数退避的基数（秒），默认 0.5。测试里会设得很小。"""
+    raw = os.environ.get("PTEROPILOT_RETRY_BASE", "").strip()
+    if not raw:
+        return 0.5
+    try:
+        return max(0.0, min(5.0, float(raw)))
+    except ValueError:
+        return 0.5
+
+
+def _backoff_delay(attempt: int, response: httpx.Response | None = None) -> float:
+    """第 ``attempt`` 次重试前等多久。
+
+    优先听面板的话：``Retry-After`` 是秒数就用它（仍然夹到 5 秒，
+    免得一个离谱的值把工具挂死）。否则指数退避 + 抖动，避免一批工具
+    同时醒来又同时把面板打一遍。
+    """
+    if response is not None:
+        raw = (response.headers.get("retry-after") or "").strip()
+        if raw.isdigit():
+            return min(_MAX_RETRY_DELAY, max(0.0, float(raw)))
+    base = _read_base_delay()
+    delay = base * (2 ** attempt)
+    return min(_MAX_RETRY_DELAY, delay) * (1 + random.random() * 0.25)
 
 POWER_SIGNALS = ("start", "stop", "restart", "kill")
 
@@ -122,20 +170,37 @@ class _Guarded:
         )
 
     async def _ask(self, method: str, *args, **kwargs) -> httpx.Response:
-        try:
-            r = await getattr(self._inner, method)(*args, **kwargs)
-        except httpx.ConnectError as exc:
-            raise PanelError(
-                "连不上面板。请检查 PANEL_URL 是否正确（要带 https://）、"
-                "面板是否在线、网络是否可达。"
-            ) from exc
-        except httpx.TimeoutException as exc:
-            raise PanelError(
-                "面板响应超时（30 秒）。面板可能负载过高或网络不稳，稍后重试。"
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise PanelError(f"与面板通信失败：{redact(str(exc))}") from exc
-        return self._speak(r)
+        retries = _read_retries() if method in _RETRY_METHODS else 0
+        attempt = 0
+        while True:
+            try:
+                r = await getattr(self._inner, method)(*args, **kwargs)
+            except httpx.ConnectError as exc:
+                if attempt < retries:
+                    await asyncio.sleep(_backoff_delay(attempt))
+                    attempt += 1
+                    continue
+                raise PanelError(
+                    "连不上面板。请检查 PANEL_URL 是否正确（要带 https://）、"
+                    "面板是否在线、网络是否可达。"
+                ) from exc
+            except httpx.TimeoutException as exc:
+                if attempt < retries:
+                    await asyncio.sleep(_backoff_delay(attempt))
+                    attempt += 1
+                    continue
+                raise PanelError(
+                    "面板响应超时（30 秒）。面板可能负载过高或网络不稳，稍后重试。"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise PanelError(f"与面板通信失败：{redact(str(exc))}") from exc
+
+            # 限流 / 网关抖动：GET 值得再试一次，写操作原样报错
+            if r.status_code in _RETRY_STATUS and attempt < retries:
+                await asyncio.sleep(_backoff_delay(attempt, r))
+                attempt += 1
+                continue
+            return self._speak(r)
 
     async def get(self, *args, **kwargs) -> httpx.Response:
         return await self._ask("get", *args, **kwargs)
