@@ -2248,6 +2248,7 @@ def _print_help() -> None:
     print("  pteropilot --log smp                  控制台末 80 行")
     print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
     print("  pteropilot --log smp --lines 300      往前翻，1–2000 行")
+    print("  pteropilot --log \"*\"                 所有服务器一起看（也支持 a,b 逗号列表）")
     print("  pteropilot --players                  本机有采样记录的服务器")
     print("  pteropilot --players smp --days 7     近 7 天在线时长排行（离线也能看）")
     print("  （以上都支持 --json，输出机器可读）")
@@ -2429,6 +2430,7 @@ def _run_log(argv: list[str]) -> int:
     服务器崩了、指令没反应时，最想看的就是控制台最后几十行——原来只能开
     AI 客户端问一句。这条命令直接把它打到终端，还能按关键字过滤。
 
+    ``标识`` 可以是单台、``"*"``（全部可访问服务器）或 ``a,b`` 逗号列表。
     ``--lines`` 取末尾 N 行；``--grep`` 不区分大小写，命中 0 行时退出码为 1
     （方便 `until pteropilot --log smp --grep Started | grep -q .` 这类等待脚本）。
     """
@@ -2438,8 +2440,24 @@ def _run_log(argv: list[str]) -> int:
         if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
             sid = argv[i + 1]
     if not sid:
-        print("用法：pteropilot --log <服务器标识> [--lines 80] [--grep 关键字] [--json]", file=sys.stderr)
+        print(
+        '用法：pteropilot --log <标识|"*"|a,b> [--lines 80] [--grep 关键字] [--json]',
+        file=sys.stderr,
+    )
         return 2
+
+    # 一台 / 多台都走同一条路径：identifiers 是待查列表。
+    # "*" 交给 _resolve_target_ids 解析成全部可访问服务器；
+    # "a,b" 按逗号拆。单台时下面的输出格式与之前完全一致。
+    if sid == "*" or "," in sid:
+        wanted = ["*"] if sid == "*" else [x.strip() for x in sid.split(",") if x.strip()]
+        if not wanted:
+            print("✗ --log 的服务器列表是空的", file=sys.stderr)
+            return 2
+        multi = True
+    else:
+        wanted = [sid]
+        multi = False
 
     as_json = "--json" in argv
 
@@ -2463,56 +2481,128 @@ def _run_log(argv: list[str]) -> int:
         print(f"pteropilot --log 需要面板配置：{exc}", file=sys.stderr)
         return 1
 
-    async def _fetch() -> str:
+    def _split(raw: str) -> tuple[list[str], list[str]]:
+        """把面板返回的原始日志切成行：清 ANSI、统一换行、去掉末尾空行。"""
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", raw).replace("\r\n", "\n").replace("\r", "\n")
+        out = clean.split("\n")
+        if out and out[-1] == "":
+            out.pop()
+        return out
+
+    def _filter(all_lines: list[str]) -> list[str]:
+        if not pattern:
+            return all_lines
+        low = pattern.lower()
+        return [ln for ln in all_lines if low in ln.lower()]
+
+    if not multi:
+        async def _fetch() -> str:
+            client = PanelClient(config, timeout=20.0)
+            try:
+                return await client.console_log(sid)
+            finally:
+                await client.aclose()
+
+        try:
+            raw = asyncio.run(_fetch())
+        except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+            print(f"✗ 读取失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+            return 1
+
+        all_lines = _split(raw)
+        matched = _filter(all_lines)
+        tail = matched[-lines:]
+
+        if as_json:
+            print(json.dumps({
+                "server_id": sid,
+                "total_lines": len(all_lines),
+                "matched_lines": len(matched),
+                "shown_lines": len(tail),
+                "grep": pattern,
+                "lines": tail,
+            }, ensure_ascii=False, indent=2))
+        elif not tail:
+            if pattern:
+                print(f"（{len(all_lines)} 行日志里没有匹配 {pattern!r} 的内容）")
+            else:
+                print("（控制台目前没有输出）")
+        else:
+            header = f"### {sid} 控制台"
+            if pattern:
+                header += f"（匹配 {pattern!r}：{len(matched)}/{len(all_lines)} 行）"
+            else:
+                header += f"（末 {len(tail)}/{len(all_lines)} 行）"
+            print(header)
+            for ln in tail:
+                print(ln)
+
+        return 0 if tail else 1
+
+    # ---- 多台：并发取，单台失败单独标注，不阻断其余 ----
+    async def _fetch_many() -> list[tuple[str, str | BaseException]]:
+        ids = await _resolve_target_ids(wanted)
+        if not ids:
+            return []
         client = PanelClient(config, timeout=20.0)
         try:
-            return await client.console_log(sid)
+            async def _one(i: str):
+                try:
+                    return i, await client.console_log(i)
+                except Exception as exc:  # noqa: BLE001 - 单台失败要如实带回来
+                    return i, exc
+            return list(await _gather_bounded(_one, ids))
         finally:
             await client.aclose()
 
     try:
-        raw = asyncio.run(_fetch())
-    except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+        results = asyncio.run(_fetch_many())
+    except Exception as exc:  # noqa: BLE001
         print(f"✗ 读取失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
         return 1
 
-    # 面板返回的日志可能带 ANSI 颜色与 \r，先清干净再按行切
-    clean = re.sub(r"\x1b\[[0-9;]*m", "", raw).replace("\r\n", "\n").replace("\r", "\n")
-    all_lines = clean.split("\n")
-    if all_lines and all_lines[-1] == "":
-        all_lines.pop()
+    if not results:
+        print("（没有可访问的服务器）")
+        return 1
 
-    matched = all_lines
-    if pattern:
-        low = pattern.lower()
-        matched = [ln for ln in all_lines if low in ln.lower()]
-    tail = matched[-lines:]
-
-    if as_json:
-        print(json.dumps({
-            "server_id": sid,
+    entries: list[dict] = []
+    any_output = False
+    for ident, payload in results:
+        if isinstance(payload, BaseException):
+            entries.append({"server_id": ident, "error": type(payload).__name__})
+            continue
+        all_lines = _split(payload)
+        matched = _filter(all_lines)
+        tail = matched[-lines:]
+        if tail:
+            any_output = True
+        entries.append({
+            "server_id": ident,
             "total_lines": len(all_lines),
             "matched_lines": len(matched),
             "shown_lines": len(tail),
-            "grep": pattern,
             "lines": tail,
-        }, ensure_ascii=False, indent=2))
-    elif not tail:
-        if pattern:
-            print(f"（{len(all_lines)} 行日志里没有匹配 {pattern!r} 的内容）")
-        else:
-            print("（控制台目前没有输出）")
-    else:
-        header = f"### {sid} 控制台"
-        if pattern:
-            header += f"（匹配 {pattern!r}：{len(matched)}/{len(all_lines)} 行）"
-        else:
-            header += f"（末 {len(tail)}/{len(all_lines)} 行）"
-        print(header)
-        for ln in tail:
-            print(ln)
+        })
 
-    return 0 if tail else 1
+    if as_json:
+        print(json.dumps({"servers": entries, "grep": pattern}, ensure_ascii=False, indent=2))
+    else:
+        for e in entries:
+            if "error" in e:
+                print(f"### {e['server_id']} 控制台\n❌ 读取失败（{e['error']}）")
+                continue
+            if not e["lines"]:
+                reason = (f"没有匹配 {pattern!r} 的内容" if pattern else "控制台目前没有输出")
+                print(f"### {e['server_id']} 控制台\n（{e['total_lines']} 行日志：{reason}）")
+                continue
+            head = f"### {e['server_id']} 控制台"
+            head += (f"（匹配 {pattern!r}：{e['matched_lines']}/{e['total_lines']} 行）"
+                     if pattern else f"（末 {e['shown_lines']}/{e['total_lines']} 行）")
+            print(head)
+            for ln in e["lines"]:
+                print(ln)
+
+    return 0 if any_output else 1
 
 
 def main() -> None:
