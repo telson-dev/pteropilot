@@ -1636,6 +1636,48 @@ def _print_version() -> None:
         )
 
 
+def _version_tuple(v: str) -> tuple[int, ...]:
+    """把 ``0.2.33`` 这样的版本号拆成可比较的元组。
+
+    不能用字符串比较：``"0.2.9" > "0.2.33"`` 是 True，会误判成「不需要升级」。
+    非数字段（如 ``rc1``）一律截断，只比前面的纯数字部分。
+    """
+    parts: list[int] = []
+    for seg in v.strip().lstrip("vV").split("."):
+        num = ""
+        for ch in seg:
+            if ch.isdigit():
+                num += ch
+            else:
+                break
+        if not num:
+            break
+        parts.append(int(num))
+    return tuple(parts)
+
+
+def _latest_release_version(timeout: float = 5.0) -> str | None:
+    """查 GitHub 最新 release 的版本号；失败返回 None（调用方不该因此报错）。
+
+    不查 PyPI 而查 GitHub Releases：PyPI 上的包可能长期滞后（本项目就卡过
+    33 个版本），拿它当「最新」会得出相反结论。
+    """
+    import urllib.request
+
+    url = "https://api.github.com/repos/telson-dev/pteropilot/releases/latest"
+    try:
+        req = urllib.request.Request(url, headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": f"pteropilot/{__version__}",
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        tag = str(data.get("tag_name") or "").strip()
+        return tag.lstrip("vV") or None
+    except Exception:  # noqa: BLE001 - 网络/限流/被墙都只意味着「不知道」
+        return None
+
+
 def _run_doctor(skip_network: bool = False) -> int:
     """环境自检：Python 版本、配置、密钥前缀、面板连通、告警配置。
 
@@ -1684,6 +1726,22 @@ def _run_doctor(skip_network: bool = False) -> int:
     if config.readonly:
         print("PANEL_READONLY: 开启（所有写操作会被拒绝）")
 
+    # 3.5) 版本新鲜度：装得比最新 release 旧时明确告知怎么升
+    #      放这里而不是最后，因为配置不全时下面会提前 return，而「装了旧版」
+    #      恰恰常被误判成「工具少/功能不对」，越早看到越好。
+    if not skip_network:
+        latest = _latest_release_version()
+        if latest is None:
+            print(f"版本：v{__version__}（查不到最新版，跳过对比）")
+        elif _version_tuple(latest) > _version_tuple(__version__):
+            print(f"版本：v{__version__} → 最新 v{latest}（落后）")
+            hints.append(
+                f"装的是旧版：最新 v{latest}，当前 v{__version__}。升级命令：\n"
+                f"      uv tool install --force "
+                f"https://github.com/telson-dev/pteropilot/releases/latest/download/pteropilot-{latest}-py3-none-any.whl"
+            )
+        else:
+            print(f"版本：v{__version__}（已是最新）")
     # 4) 面板连通
     if problems:
         print()

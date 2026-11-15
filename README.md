@@ -106,6 +106,19 @@ pteropilot --doctor --no-network # config only, no network calls
 The output never contains secrets (only key prefixes), so you can paste it
 as-is when asking for help.
 
+Since v0.2.34 the doctor also compares your build against the latest GitHub
+release and prints the exact upgrade command when you are behind:
+
+```
+版本：v0.2.20 → 最新 v0.2.33（落后）
+  · 装的是旧版：最新 v0.2.33，当前 v0.2.20。升级命令：
+      uv tool install --force https://github.com/telson-dev/pteropilot/releases/latest/download/pteropilot-0.2.33-py3-none-any.whl
+```
+
+This matters because PyPI can lag far behind (it sat at 0.2.0 for weeks), and an
+old build looks like "missing tools" rather than "wrong version". The check is
+informational only — a failed lookup prints `查不到最新版` and never fails the run.
+
 ## Broadcast one command to every server
 
 ```bash
