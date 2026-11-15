@@ -31,6 +31,16 @@ No panel login, no digging through logs — just ask.
 - ⚡ Batch ops: one-shot status summary, batch start/stop/restart, batch backup overview/create
 - 🔒 Safety: read-only mode and explicit confirmation for dangerous actions; your API key never leaves your machine
 
+Batch tools fan out across servers, but **never all at once**: they run at most 8
+concurrent requests by default, so a 40-server fleet does not open 40 connections
+into one panel and get rate-limited. Tune it with `PTEROPILOT_CONCURRENCY`
+(clamped to 1–32):
+
+```bash
+PTEROPILOT_CONCURRENCY=4  pteropilot --status   # gentler on a small panel
+PTEROPILOT_CONCURRENCY=16 pteropilot --status   # faster when the panel is beefy
+```
+
 ## Install
 
 Requires Python 3.12+. Run in one line with [`uv`](https://docs.astral.sh/uv/):

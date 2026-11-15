@@ -34,6 +34,41 @@ config = Config()
 panel = PanelClient(config)
 
 
+# 批量工具同时最多打多少台服务器。
+# 面板是单实例 + 单数据库，几十条连接同时进来容易 429 或把整机拖慢；
+# 8 条在实测里既快又不惹人，可以用环境变量调（夹在 1–32）。
+def _read_concurrency() -> int:
+    raw = os.environ.get("PTEROPILOT_CONCURRENCY", "").strip()
+    if not raw:
+        return 8
+    try:
+        return max(1, min(32, int(raw)))
+    except ValueError:
+        return 8
+
+
+MAX_CONCURRENCY = _read_concurrency()
+
+
+async def _gather_bounded(fn, items, limit: int | None = None):
+    """像 ``asyncio.gather`` 一样保序，但同时只跑 ``limit`` 个。
+
+    ``fn`` 通常自己把异常吞掉并转成一行错误文本（批量工具的口径是「单台失败
+    不阻断其余」），所以这里不需要 ``return_exceptions``。
+    """
+    everything = list(items)
+    if not everything:
+        return []
+    lim = max(1, limit or MAX_CONCURRENCY)
+    sem = asyncio.Semaphore(lim)
+
+    async def _one(item):
+        async with sem:
+            return await fn(item)
+
+    return await asyncio.gather(*(_one(x) for x in everything))
+
+
 def _attrs(item: Any) -> dict:
     if isinstance(item, dict) and "attributes" in item:
         return item["attributes"]
@@ -102,7 +137,7 @@ async def list_my_servers(status: str = "", with_status: bool = False) -> str:
         except Exception:
             return "?"  # 单台状态拉取失败不阻断
 
-    states = await asyncio.gather(*(_state(a.get("identifier") or a.get("id") or "?") for a, _ in rows))
+    states = await _gather_bounded(lambda a: _state(a.get("identifier") or a.get("id") or "?"), [a for a, _ in rows])
     lines = [
         f"- {a.get('identifier', '?')} | {name} | {a.get('uuid', '?')} | {st}"
         for (a, name), st in zip(rows, states)
@@ -300,7 +335,7 @@ async def batch_get_status() -> str:
             # 单台失败（超时/无权限/面板报错）不阻断整体，标注后继续。
             return f"- {ident} | {name} | 查询失败（超时或面板报错）", False
 
-    results = await asyncio.gather(*(_one(s) for s in servers))
+    results = await _gather_bounded(_one, servers)
     lines = [line for line, _ok in results]
     ok = sum(1 for _line, success in results if success)
     failed = len(lines) - ok
@@ -712,7 +747,7 @@ async def batch_list_players(server_ids: list[str]) -> str:
         except Exception as e:
             return f"### {sid}\n❌ 查询失败: {e}"
 
-    results = await asyncio.gather(*(_one(sid) for sid in target_ids))
+    results = await _gather_bounded(_one, target_ids)
     return "\n\n".join(results)
 
 
@@ -1047,7 +1082,7 @@ async def _power_data(
         except Exception as exc:  # noqa: BLE001 - 单台失败要如实带回来
             return {"id": sid, "ok": False, "error": type(exc).__name__}
 
-    results = list(await asyncio.gather(*(_apply(sid) for sid in target_ids)))
+    results = list(await _gather_bounded(_apply, target_ids))
     data["results"] = results
     data["total"] = len(results)
     data["ok"] = sum(1 for r in results if r["ok"])
@@ -1175,7 +1210,7 @@ async def _broadcast_data(
             sid = a.get("identifier") or a.get("id")
             if sid:
                 pairs.append((str(sid), a.get("name") or str(sid)))
-        states = await asyncio.gather(*(_state(sid) for sid, _ in pairs))
+        states = await _gather_bounded(_state, [sid for sid, _ in pairs])
         target_ids = [sid for (sid, _n), st in zip(pairs, states) if st == "running"]
         if not target_ids:
             data.update(status="refused", reason="no_running")
@@ -1205,7 +1240,7 @@ async def _broadcast_data(
         except Exception as exc:  # noqa: BLE001 - 单台失败要如实带回来
             return {"id": sid, "ok": False, "error": type(exc).__name__}
 
-    results = list(await asyncio.gather(*(_apply(sid) for sid in target_ids)))
+    results = list(await _gather_bounded(_apply, target_ids))
     data["results"] = results
     data["total"] = len(results)
     data["ok"] = sum(1 for r in results if r["ok"])
@@ -1299,7 +1334,7 @@ async def batch_backup_status() -> str:
         except Exception:
             return f"- {sid} | {name} | ❌ 查询失败"
 
-    results = await asyncio.gather(*(_one(s) for s in servers))
+    results = await _gather_bounded(_one, servers)
     failed = sum(1 for line in results if "查询失败" in line)
     header = f"批量备份概览：共 {len(servers)} 台，失败 {failed} 台："
     return header + "\n" + "\n".join(results)
@@ -1339,7 +1374,7 @@ async def batch_backup(server_ids: list[str], confirm: bool = False) -> str:
             return f"- {sid} | ❌ 创建失败（无权限/超时/面板报错）"
 
     # 并发执行（gather 保序）：面板无批量备份端点，并发调用缩短整批耗时。
-    for line in await asyncio.gather(*(_create(sid) for sid in target_ids)):
+    for line in await _gather_bounded(_create, target_ids):
         lines.append(line)
         if "✅" in line:
             ok += 1
@@ -1382,7 +1417,7 @@ async def batch_get_console_log(server_ids: list[str], max_chars: int = 3000) ->
         except Exception as e:
             return f"### {sid}\n❌ 读取失败: {e}"
 
-    results = await asyncio.gather(*(_one(sid) for sid in target_ids))
+    results = await _gather_bounded(_one, target_ids)
     return "\n\n".join(results)
 
 
@@ -1434,9 +1469,10 @@ async def broadcast_message(server_ids: list[str], message: str, confirm: bool =
         except Exception as e:  # 单台失败不阻断
             return None, f"{name}: {e}"
 
-    # 并发广播（gather 保序）：多台服务器同时发公告，显著缩短整批耗时。
-    for done_name, done_fail in await asyncio.gather(
-        *(_bcast(sid, name) for sid, name in targets)
+    # 并发广播（保序，但同时只打 MAX_CONCURRENCY 台）：
+    # 多台服务器同时发公告能显著缩短整批耗时，但一次性几十条连接会被面板限流。
+    for done_name, done_fail in await _gather_bounded(
+        lambda t: _bcast(t[0], t[1]), targets
     ):
         if done_fail is None:
             ok.append(done_name)
@@ -2116,7 +2152,7 @@ async def _status_data(server_id: str | None = None) -> dict:
         except Exception as exc:  # noqa: BLE001 - 单台失败不阻断整体
             errors.append(f"{ident}: {type(exc).__name__}")
 
-    await asyncio.gather(*(_one(s) for s in servers))
+    await _gather_bounded(_one, servers)
     rows.sort(key=lambda x: x["id"])
     return {"servers": rows, "errors": errors}
 
