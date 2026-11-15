@@ -37,6 +37,31 @@ def log_path(server_id: str, directory: Path | None = None) -> Path:
     return Path(d) / f"{_safe_name(server_id)}.jsonl"
 
 
+def list_servers(directory: Path | None = None) -> list[tuple[str, int]]:
+    """列出本地已有采样记录的服务器：``[(server_id, 文件字节数), ...]``。
+
+    采样文件名是 ``_safe_name(server_id)``，无法反推出原始标识——但面板上的
+    服务器标识本身就是 UUID / 短标识，两者一致，所以直接把文件名主干当标识用。
+
+    按字节数倒序：采样越多的排前面，方便 `--players` 不带参数时挑一个来看。
+    """
+    d = Path(directory or DEFAULT_DIR)
+    if not d.is_dir():
+        return []
+    out: list[tuple[str, int]] = []
+    try:
+        for p in d.iterdir():
+            if p.is_file() and p.suffix == ".jsonl" and p.stem:
+                try:
+                    out.append((p.stem, p.stat().st_size))
+                except OSError:
+                    continue
+    except OSError:
+        return []
+    out.sort(key=lambda kv: (-kv[1], kv[0]))
+    return out
+
+
 def _last_record(path: Path) -> dict | None:
     try:
         with path.open("r", encoding="utf-8") as f:

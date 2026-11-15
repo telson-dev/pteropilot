@@ -2123,6 +2123,70 @@ def _run_status(argv: list[str]) -> int:
     return 0 if all(r["health"] == "healthy" for r in data["servers"]) else 1
 
 
+def _run_players(argv: list[str]) -> int:
+    """``pteropilot --players [标识] [--days N] [--top N] [--json]``。
+
+    读的是**本机**采样文件（``~/.pteropilot/playerlog/``），所以不需要面板配置、
+    不需要联网——面板挂了也能看历史趋势。
+
+    不给标识时列出本地有记录的服务器；给标识时输出该服务器的活跃统计。
+    """
+    sid: str | None = None
+    if "--players" in argv:
+        i = argv.index("--players")
+        if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            sid = argv[i + 1]
+
+    as_json = "--json" in argv
+
+    def _int_opt(flag: str, default: int, lo: int, hi: int) -> int:
+        if flag not in argv:
+            return default
+        i = argv.index(flag)
+        if i + 1 >= len(argv):
+            raise ValueError(f"{flag} 后面要跟一个数字")
+        raw = argv[i + 1]
+        try:
+            v = int(raw)
+        except ValueError:
+            raise ValueError(f"{flag} 需要整数，收到 {raw!r}") from None
+        return max(lo, min(hi, v))
+
+    try:
+        days = _int_opt("--days", 7, 1, 365)
+        top = _int_opt("--top", 10, 1, 100)
+    except ValueError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 2
+
+    # 不给标识：列出本地有采样记录的服务器
+    if sid is None:
+        servers = playerlog.list_servers()
+        if as_json:
+            print(json.dumps(
+                {"servers": [{"server_id": s, "bytes": n} for s, n in servers]},
+                ensure_ascii=False, indent=2,
+            ))
+        elif not servers:
+            print("本机还没有任何玩家采样记录。")
+            print("先在 AI 客户端里调用两次 list_players（每次会记一条采样），再回来看趋势。")
+        else:
+            print(f"本机有玩家采样记录的服务器（{len(servers)} 台）:")
+            for s, n in servers:
+                print(f"  {s}   {n / 1024:.1f} KB")
+            print("\n看某一台：pteropilot --players <标识> [--days 7] [--json]")
+        return 0 if servers else 1
+
+    data = playerlog.stats(sid, days=days)
+    if as_json:
+        print(json.dumps({"server_id": sid, "days": days, **data}, ensure_ascii=False, indent=2))
+    else:
+        print(playerlog.format_stats(sid, data, days=days, top=top))
+
+    # 没有采样时返回非零，方便 cron 判断「还没积累够数据」
+    return 0 if data.get("samples") else 1
+
+
 def main() -> None:
     # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     argv = sys.argv[1:]
@@ -2151,6 +2215,9 @@ def main() -> None:
     # --status：命令行看状态后退出（不启动 server）
     if "--status" in argv:
         sys.exit(_run_status(argv))
+    # --players：命令行看玩家活跃趋势后退出（只读本机采样，不需要面板配置）
+    if "--players" in argv:
+        sys.exit(_run_players(argv))
     try:
         config.validate()
     except ValueError as exc:

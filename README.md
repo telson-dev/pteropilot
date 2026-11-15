@@ -143,6 +143,22 @@ pteropilot --status --json       # machine-readable
 Exit code `0` only when every server is healthy, `1` otherwise — usable as a cron
 health check. A single failing server is listed as `⚠` and does not hide the rest.
 
+Player activity is logged locally every time `list_players` runs (one sample per
+call, in `~/.pteropilot/playerlog/`). `--players` reads those files directly, so it
+needs **no panel config and no network** — it still works when the panel is down:
+
+```bash
+pteropilot --players                    # which servers have local samples
+pteropilot --players smp                # 7-day trend: minutes online, busiest hours
+pteropilot --players smp --days 30      # wider window (1–365)
+pteropilot --players smp --top 20       # longer leaderboard (1–100)
+pteropilot --players smp --json         # machine-readable
+```
+
+Exit code `1` when there are no samples yet (so cron can tell "not enough data"
+from "broken"), `2` on a bad argument. The numbers are inferred from the console
+log, not authoritative playtime — sample more often for a closer estimate.
+
 `--in` / `--at` make the process wait before acting — handy when a cron entry
 cannot express "at 03:00 only if it is currently running". Wait is capped at
 24 hours (anything longer belongs in cron/systemd); Ctrl+C during the wait
