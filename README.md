@@ -156,6 +156,21 @@ pteropilot --status --json       # machine-readable
 Exit code `0` only when every server is healthy, `1` otherwise — usable as a cron
 health check. A single failing server is listed as `⚠` and does not hide the rest.
 
+When a server crashes or a command does nothing, the next question is always "what
+does the console say". `--log` prints that tail straight into your terminal:
+
+```bash
+pteropilot --log smp                       # last 80 lines
+pteropilot --log smp --lines 300           # deeper (1–2000)
+pteropilot --log smp --grep error          # only matching lines, case-insensitive
+pteropilot --log smp --grep Started --json # machine-readable
+```
+
+ANSI colour codes and carriage returns are stripped, so the output stays readable
+when piped or pasted. Exit code is `1` when there is nothing to show (empty console,
+or nothing matched `--grep`) — handy for `until pteropilot --log smp --grep Started`;
+`2` means the argument itself was wrong.
+
 Player activity is logged locally every time `list_players` runs (one sample per
 call, in `~/.pteropilot/playerlog/`). `--players` reads those files directly, so it
 needs **no panel config and no network** — it still works when the panel is down:

@@ -13,6 +13,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -2245,6 +2246,98 @@ def _run_players(argv: list[str]) -> int:
     return 0 if data.get("samples") else 1
 
 
+def _run_log(argv: list[str]) -> int:
+    """``pteropilot --log <标识> [--lines N] [--grep 关键字] [--json]``。
+
+    服务器崩了、指令没反应时，最想看的就是控制台最后几十行——原来只能开
+    AI 客户端问一句。这条命令直接把它打到终端，还能按关键字过滤。
+
+    ``--lines`` 取末尾 N 行；``--grep`` 不区分大小写，命中 0 行时退出码为 1
+    （方便 `until pteropilot --log smp --grep Started | grep -q .` 这类等待脚本）。
+    """
+    sid: str | None = None
+    if "--log" in argv:
+        i = argv.index("--log")
+        if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            sid = argv[i + 1]
+    if not sid:
+        print("用法：pteropilot --log <服务器标识> [--lines 80] [--grep 关键字] [--json]", file=sys.stderr)
+        return 2
+
+    as_json = "--json" in argv
+
+    def _opt(flag: str) -> str | None:
+        if flag not in argv:
+            return None
+        i = argv.index(flag)
+        return argv[i + 1] if i + 1 < len(argv) else None
+
+    try:
+        lines = int(_opt("--lines") or 80)
+    except ValueError:
+        print("✗ --lines 需要整数", file=sys.stderr)
+        return 2
+    lines = max(1, min(2000, lines))
+    pattern = _opt("--grep")
+
+    try:
+        config.validate()
+    except ValueError as exc:
+        print(f"pteropilot --log 需要面板配置：{exc}", file=sys.stderr)
+        return 1
+
+    async def _fetch() -> str:
+        client = PanelClient(config, timeout=20.0)
+        try:
+            return await client.console_log(sid)
+        finally:
+            await client.aclose()
+
+    try:
+        raw = asyncio.run(_fetch())
+    except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+        print(f"✗ 读取失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+        return 1
+
+    # 面板返回的日志可能带 ANSI 颜色与 \r，先清干净再按行切
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", raw).replace("\r\n", "\n").replace("\r", "\n")
+    all_lines = clean.split("\n")
+    if all_lines and all_lines[-1] == "":
+        all_lines.pop()
+
+    matched = all_lines
+    if pattern:
+        low = pattern.lower()
+        matched = [ln for ln in all_lines if low in ln.lower()]
+    tail = matched[-lines:]
+
+    if as_json:
+        print(json.dumps({
+            "server_id": sid,
+            "total_lines": len(all_lines),
+            "matched_lines": len(matched),
+            "shown_lines": len(tail),
+            "grep": pattern,
+            "lines": tail,
+        }, ensure_ascii=False, indent=2))
+    elif not tail:
+        if pattern:
+            print(f"（{len(all_lines)} 行日志里没有匹配 {pattern!r} 的内容）")
+        else:
+            print("（控制台目前没有输出）")
+    else:
+        header = f"### {sid} 控制台"
+        if pattern:
+            header += f"（匹配 {pattern!r}：{len(matched)}/{len(all_lines)} 行）"
+        else:
+            header += f"（末 {len(tail)}/{len(all_lines)} 行）"
+        print(header)
+        for ln in tail:
+            print(ln)
+
+    return 0 if tail else 1
+
+
 def main() -> None:
     # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     argv = sys.argv[1:]
@@ -2276,6 +2369,9 @@ def main() -> None:
     # --players：命令行看玩家活跃趋势后退出（只读本机采样，不需要面板配置）
     if "--players" in argv:
         sys.exit(_run_players(argv))
+    # --log：命令行看控制台日志后退出（不启动 server）
+    if "--log" in argv:
+        sys.exit(_run_log(argv))
     try:
         config.validate()
     except ValueError as exc:
