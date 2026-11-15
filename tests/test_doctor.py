@@ -32,7 +32,7 @@ def test_doctor_without_config_reports_problems(monkeypatch, capsys):
     assert code == 1
     assert "未设置 PANEL_URL" in out
     assert "未设置 PANEL_API_KEY" in out
-    assert "个工具" in out  # 版本与工具数
+    assert "个 MCP 工具" in out  # 版本行与 --version 措辞一致
 
 
 def test_doctor_no_network_skips_connectivity(monkeypatch, capsys):
@@ -87,3 +87,17 @@ def test_doctor_never_prints_full_api_key(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert secret not in out, "诊断输出泄露了完整 API Key"
     assert "ptlc_" in out  # 只显示前缀
+
+def test_doctor_version_line_matches_print_version(monkeypatch, capsys):
+    """--doctor 的版本行必须与 --version 完全一致。
+
+    用户会在两条命令之间互相对照；措辞一致他才不会以为装了两个版本。
+    """
+    import pteropilot.server as srv
+
+    srv._print_version()
+    expected = capsys.readouterr().out.strip().splitlines()[0]
+
+    _run_doctor(monkeypatch)
+    out = capsys.readouterr().out
+    assert expected in out

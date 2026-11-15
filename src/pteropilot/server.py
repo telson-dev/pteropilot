@@ -1644,7 +1644,9 @@ def _run_doctor(skip_network: bool = False) -> int:
     """
     import platform as _platform
 
-    print(f"pteropilot v{__version__}（{_tool_count()} 个工具）")
+    # 与 --version 用同一行措辞：用户会拿两处输出互相核对，
+    # 「45 个 MCP 工具」和「45 个工具」两种说法只会让人以为装了两个版本。
+    _print_version()
     print(f"Python {_platform.python_version()}　{_platform.system()} {_platform.machine()}")
     problems: list[str] = []
     hints: list[str] = []
