@@ -195,7 +195,17 @@ pteropilot --log smp                       # last 80 lines
 pteropilot --log smp --lines 300           # deeper (1–2000)
 pteropilot --log smp --grep error          # only matching lines, case-insensitive
 pteropilot --log smp --grep Started --json # machine-readable
+
+pteropilot --log "*"                       # every accessible server, at once
+pteropilot --log smp,creative              # just these two
+pteropilot --log "*" --grep error --json   # {servers: [...], grep: ...}
 ```
+
+Multi-server mode fetches concurrently (capped, same as the other batch tools) and
+a single failing server is reported inline instead of hiding the rest. A server
+with no matching lines says so explicitly rather than being silently skipped. In
+`--json` mode the top level is `{"servers": [...], "grep": ...}` — different from
+the single-server `{"server_id": ...}` shape, so scripts can tell them apart.
 
 ANSI colour codes and carriage returns are stripped, so the output stays readable
 when piped or pasted. Exit code is `1` when there is nothing to show (empty console,

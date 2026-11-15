@@ -156,6 +156,52 @@ pteropilot --status --json       # 结构化输出
 退出码：全部健康才是 `0`，否则 `1`——可以直接当 cron 健康检查用。
 单台查询失败会显示 `⚠`，不会盖住其他服务器。
 
+加上 `--watch` 就会一直跑下去，并且**只在真的变化时重画**（CPU 和内存每秒都在
+小幅抖动，刻意排除在变化检测之外，否则它会一直刷屏，反而看不出某台是什么时候
+挂的）：
+
+```bash
+pteropilot --status --watch                  # 每 30 秒一次，Ctrl+C 退出
+pteropilot --status --watch --interval 10    # 间隔 5–3600 秒
+pteropilot --status --watch --json           # 变化时每行一个 JSON 对象
+```
+
+### 看控制台
+
+服务器崩了、指令没反应，下一步永远是想知道「控制台最后在说什么」。`--log`
+直接把它打到终端：
+
+```bash
+pteropilot --log smp                       # 末 80 行
+pteropilot --log smp --lines 300           # 往前翻（1–2000）
+pteropilot --log smp --grep error          # 只匹配行，不区分大小写
+pteropilot --log smp --grep Started --json # 机器可读
+
+pteropilot --log "*"                       # 所有可访问服务器一起看
+pteropilot --log smp,creative              # 只看这几台
+pteropilot --log "*" --grep error --json   # {servers: [...], grep: ...}
+```
+
+多台模式并发取（有并发上限，和其他批量工具一致），单台失败会在输出里单独标注、
+不盖住其余；没有命中的那台会明说「没有匹配的内容」，而不是悄悄跳过。
+`--json` 时多台顶层是 `{"servers": [...], "grep": ...}`，与单台的
+`{"server_id": ...}` 区分开，脚本能分辨。
+
+输出前会清掉 ANSI 颜色和回车符，管道或粘贴都不会乱。没有内容可显示时退出码
+`1`（空控制台，或 `--grep` 没命中），参数写错是 `2`。
+
+### 玩家历史
+
+玩家活跃度在每次 `list_players` 被调用时记到本机（一次调用一条采样，存在
+`~/.pteropilot/playerlog/`）。`--players` 直接读这些文件，**不需要面板配置、
+不需要联网**——面板挂了也照样能看：
+
+```bash
+pteropilot --players                 # 本机有采样记录的服务器
+pteropilot --players smp --days 7    # 近 7 天在线时长排行
+pteropilot --players smp --top 5 --json
+```
+
 ## 装好了先自检版本
 
 ```bash
