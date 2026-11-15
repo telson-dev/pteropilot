@@ -116,6 +116,16 @@ def git(*args: str) -> str:
     return out.stdout
 
 
+
+def _git_blob(path: str) -> bytes | None:
+    """取 HEAD 里某个路径的原始 blob 字节（LF，与 git 记录一致）。"""
+    r = subprocess.run(
+        ["git", "cat-file", "blob", f"HEAD:{path}"],
+        capture_output=True, cwd=str(ROOT), check=False,
+    )
+    return r.stdout if r.returncode == 0 else None
+
+
 def main() -> int:
     remote_sha = api("GET", f"/repos/{REPO}/git/ref/heads/{BRANCH}")["object"]["sha"]
     local_sha = git("rev-parse", "HEAD").strip()
@@ -173,7 +183,12 @@ def main() -> int:
         if not abs_path.exists():
             print(f"  跳过（本地不存在）{path}")
             continue
-        raw = abs_path.read_bytes()
+        # 从 git 对象读，而不是读工作区文件：工作区在 Windows 上可能是 CRLF，
+        # 而 blob 是 LF。读工作区会让 API 推上去的 blob hash 和本地 git 的对不上，
+        # 于是 release.py 的「本地树 == 远端树」校验会误报（已经踩过）。
+        raw = _git_blob(path)
+        if raw is None:
+            raw = abs_path.read_bytes()
         blob = api(
             "POST",
             f"/repos/{REPO}/git/blobs",
