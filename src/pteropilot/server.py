@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import math
 import os
 import re
 import sys
@@ -1883,6 +1884,11 @@ def _parse_duration(raw: str) -> float:
         n = float(num_part)
     except ValueError as exc:
         raise ValueError(f"看不懂的时间间隔: {raw}") from exc
+    # float() 认得 "nan" / "inf" 这类字面量：nan 会让 time.sleep() 抛
+    # ValueError（未被捕获就糊一屏堆栈），inf 虽然会被上限拦住，但报「要等
+    # inf 小时」很难看。两者都当作用户输错。
+    if not math.isfinite(n):
+        raise ValueError(f"看不懂的时间间隔: {raw}")
     if n < 0:
         raise ValueError("时间间隔不能为负")
     return n * m
@@ -2250,6 +2256,8 @@ def _print_help() -> None:
     print('  pteropilot --broadcast "say 5 分钟后重启"')
     print('  pteropilot --broadcast "stop" --confirm')
     print("  pteropilot --power restart --servers smp,creative --confirm")
+    print("  pteropilot --broadcast \"stop\" --in 5m --confirm     等到点再发（5m / 300s / 2h）")
+    print("  pteropilot --power restart --servers smp --at 03:00 --confirm   等到某个时刻")
     print()
     print("环境变量")
     print("  PANEL_URL            面板根地址，如 https://panel.example.com")
