@@ -2219,6 +2219,49 @@ async def _watch_loop(fetch, *, interval: float, emit, heartbeat, max_rounds: in
         await asyncio.sleep(interval)
 
 
+def _print_help() -> None:
+    """``pteropilot --help``：命令行速查。
+
+    必须**不依赖面板配置**——用户拿到命令后第一个敲的就是 ``--help``，
+    以前这里会走到启动流程、报「需要设置 PANEL_URL」然后退出 1。
+    """
+    print(f"pteropilot v{__version__} — 让 AI 助手直接管理 Pterodactyl / Pelican 服务器")
+    print()
+    print("不带任何参数运行 = 启动 MCP server（给 Claude / Cursor 等客户端用）。")
+    print()
+    print("自检与信息")
+    print("  pteropilot --help                     显示这份说明")
+    print("  pteropilot --version                  版本与工具数")
+    print("  pteropilot --doctor                   环境自检（--no-network 只查配置）")
+    print()
+    print("看服务器（都是只读，不需要启动 MCP）")
+    print("  pteropilot --status                   全部服务器：状态 / 健康 / CPU / 内存")
+    print("  pteropilot --status smp               单台，附带在线人数")
+    print("  pteropilot --status --watch           盯着看，只在状态变化时刷屏")
+    print("  pteropilot --status --watch --interval 10   轮询间隔 5–3600 秒")
+    print("  pteropilot --log smp                  控制台末 80 行")
+    print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
+    print("  pteropilot --log smp --lines 300      往前翻，1–2000 行")
+    print("  pteropilot --players                  本机有采样记录的服务器")
+    print("  pteropilot --players smp --days 7     近 7 天在线时长排行（离线也能看）")
+    print("  （以上都支持 --json，输出机器可读）")
+    print()
+    print("动手（写操作，重要的要加 --confirm）")
+    print('  pteropilot --broadcast "say 5 分钟后重启"')
+    print('  pteropilot --broadcast "stop" --confirm')
+    print("  pteropilot --power restart --servers smp,creative --confirm")
+    print()
+    print("环境变量")
+    print("  PANEL_URL            面板根地址，如 https://panel.example.com")
+    print("  PANEL_API_KEY        客户端密钥（ptlc_ / pacc_），电源/控制台/文件需要它")
+    print("  PANEL_APP_KEY        应用密钥（ptla_ / papp_），list_nodes 等需要它（可选）")
+    print("  PANEL_READONLY=1     只读模式，所有写操作被拒")
+    print("  PTEROPILOT_CONCURRENCY=8     批量工具并发上限（1–32）")
+    print("  PTEROPILOT_RETRIES=2         只读请求的额外重试次数（写操作从不重试）")
+    print()
+    print("文档 https://telson.dev/pteropilot.html　·　教程 https://telson.dev/tutorial.html")
+
+
 def _run_status(argv: list[str]) -> int:
     """``pteropilot --status [标识]``：不开 MCP 客户端，直接看服务器状态。
 
@@ -2465,8 +2508,13 @@ def _run_log(argv: list[str]) -> int:
 
 
 def main() -> None:
-    # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     argv = sys.argv[1:]
+    # --help / -h：必须在所有校验之前。用户拿到命令第一个敲的就是它，
+    # 让它报「需要设置 PANEL_URL」是最糟糕的第一印象。
+    if "--help" in argv or "-h" in argv or "help" in argv:
+        _print_help()
+        return
+    # --version / -V：只打印版本与工具数，不校验面板配置、不启动 server
     if "--version" in argv or "-V" in argv or "-v" in argv:
         _print_version()
         return
