@@ -20,15 +20,38 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-REPO = "telson-dev/pteropilot"
+# 也可以作为通用工具用：把本文件拷到别的仓库，或直接
+#   python push_via_api.py --repo-dir D:/Projects/telson-dev
+# 目标仓库与目录都从命令行/git 推断，不再写死 pteropilot。
+import argparse as _argparse
+
+_ap = _argparse.ArgumentParser(add_help=False)
+_ap.add_argument("--repo-dir", default=None)
+_known, _ = _ap.parse_known_args()
+ROOT = Path(_known.repo_dir).resolve() if _known.repo_dir else Path(__file__).resolve().parents[1]
 BRANCH = "main"
-ROOT = Path(r"D:\Projects\pteropilot")
+
+
+def _repo_from_remote() -> str:
+    out = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(ROOT), check=False,
+    ).stdout.strip()
+    m = re.search(r"github\.com[:/]([^/]+)/(.+?)(?:\.git)?/?$", out.strip())
+    if not m:
+        raise SystemExit(f"无法从 {ROOT} 的 origin 推断仓库: {out}")
+    return f"{m.group(1)}/{m.group(2)}"
+
+
+REPO = _repo_from_remote()
 # 上次推送成功时本地的 HEAD。API 推上去的 commit 本地没有对象，
 # 所以不能拿远程 sha 做 `git diff` 的基线——用这个文件记住。
 BASE_FILE = ROOT / ".git" / "api-push-base"
