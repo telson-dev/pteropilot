@@ -2182,6 +2182,43 @@ def _format_status(data: dict) -> str:
     return "\n".join(lines)
 
 
+def _status_signature(data: dict) -> str:
+    """把一份 status 数据压成可比较的签名。
+
+    只包含**状态类**字段（id / state / health / 在线人数），刻意不含 CPU 与
+    内存——这两项每轮都在小幅抖动，放进来会导致 watch 每轮都刷一整屏表格，
+    反而看不出什么时候真的出事了。
+    """
+    rows = sorted(data.get("servers") or [], key=lambda r: str(r.get("id") or ""))
+    return "\n".join(
+        f"{r.get('id')}|{r.get('state')}|{r.get('health')}|{r.get('players')}" for r in rows
+    )
+
+
+async def _watch_loop(fetch, *, interval: float, emit, heartbeat, max_rounds: int | None = None):
+    """轮询 status：第一次和每次「状态真的变了」时调 ``emit``，其余调 ``heartbeat``。
+
+    把 I/O 全部拿出去（``emit`` / ``heartbeat`` 由调用方给），这样这个循环
+    本身可以在测试里跑，不需要真的连面板、也不需要真等。
+    返回最后一轮的数据，调用方据此算退出码。
+    """
+    prev: str | None = None
+    data: dict = {}
+    rounds = 0
+    while True:
+        data = await fetch()
+        sig = _status_signature(data)
+        if prev is None or sig != prev:
+            emit(data, prev is None)
+            prev = sig
+        else:
+            heartbeat(data)
+        rounds += 1
+        if max_rounds is not None and rounds >= max_rounds:
+            return data
+        await asyncio.sleep(interval)
+
+
 def _run_status(argv: list[str]) -> int:
     """``pteropilot --status [标识]``：不开 MCP 客户端，直接看服务器状态。
 
@@ -2195,24 +2232,77 @@ def _run_status(argv: list[str]) -> int:
             sid = argv[i + 1]
 
     as_json = "--json" in argv
+    watch = "--watch" in argv
     try:
         config.validate()
     except ValueError as exc:
         print(f"pteropilot --status 需要面板配置：{exc}", file=sys.stderr)
         return 1
 
-    try:
-        data = asyncio.run(_status_data(sid))
-    except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊一屏堆栈
-        print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
-        return 1
+    def _int_opt(flag: str, default: int, lo: int, hi: int) -> int:
+        if flag not in argv:
+            return default
+        i = argv.index(flag)
+        if i + 1 >= len(argv):
+            raise ValueError(f"{flag} 后面要跟一个数字")
+        try:
+            return max(lo, min(hi, int(argv[i + 1])))
+        except ValueError:
+            raise ValueError(f"{flag} 需要整数，收到 {argv[i + 1]!r}") from None
 
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2))
+    if watch:
+        try:
+            interval = _int_opt("--interval", 30, 5, 3600)
+            rounds = _int_opt("--rounds", 0, 0, 100000) or None   # 0 = 无限
+        except ValueError as exc:
+            print(f"✗ {exc}", file=sys.stderr)
+            return 2
+
+        def _stamp() -> str:
+            return datetime.now().strftime("%H:%M:%S")
+
+        def emit(data: dict, first: bool) -> None:
+            if as_json:
+                print(json.dumps(data, ensure_ascii=False))      # 每行一个对象，方便管道
+                return
+            head = "首次" if first else "状态变化"
+            print(f"\n[{_stamp()}] {head}")
+            print(_format_status(data))
+
+        def beat(data: dict) -> None:
+            if as_json:
+                return
+            servers = data.get("servers") or []
+            ok = sum(1 for r in servers if r.get("health") == "healthy")
+            print(f"[{_stamp()}] 无变化（{ok}/{len(servers)} 正常）", flush=True)
+
+        async def _fetch() -> dict:
+            return await _status_data(sid)
+
+        print(f"每 {interval} 秒检查一次" + (f"，共 {rounds} 轮" if rounds else "") + "，Ctrl+C 退出")
+        try:
+            data = asyncio.run(_watch_loop(
+                _fetch, interval=interval, emit=emit, heartbeat=beat, max_rounds=rounds,
+            ))
+        except KeyboardInterrupt:
+            print("\n已停止。")
+            return 0
+        except Exception as exc:  # noqa: BLE001
+            print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+            return 1
     else:
-        print(_format_status(data))
+        try:
+            data = asyncio.run(_status_data(sid))
+        except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊一屏堆栈
+            print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+            return 1
 
-    if data["errors"]:
+        if as_json:
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+        else:
+            print(_format_status(data))
+
+    if data.get("errors"):
         return 1
     # 有异常状态的服务器也算非零，方便脚本/cron 判断
     return 0 if all(r["health"] == "healthy" for r in data["servers"]) else 1

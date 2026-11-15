@@ -176,6 +176,17 @@ pteropilot --status --json       # machine-readable
 Exit code `0` only when every server is healthy, `1` otherwise — usable as a cron
 health check. A single failing server is listed as `⚠` and does not hide the rest.
 
+Add `--watch` to keep it running and only reprint when something actually changes
+(CPU and memory wobble every second, so they are deliberately excluded from the
+change detection — otherwise it would redraw forever and you would still miss the
+moment a server died):
+
+```bash
+pteropilot --status --watch                  # every 30s until Ctrl+C
+pteropilot --status --watch --interval 10    # 5–3600 seconds
+pteropilot --status --watch --json           # one JSON object per line, on change only
+```
+
 When a server crashes or a command does nothing, the next question is always "what
 does the console say". `--log` prints that tail straight into your terminal:
 
