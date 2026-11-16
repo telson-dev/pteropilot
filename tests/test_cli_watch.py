@@ -157,7 +157,7 @@ def panel_env(monkeypatch):
 def test_watch_text_output(panel_env, no_sleep, monkeypatch, capsys) -> None:
     seq = [_data(("s1", "running", "healthy", 2)), _data(("s1", "running", "healthy", 2))]
 
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         return seq.pop(0)
 
     monkeypatch.setattr(server, "_status_data", fake_status)
@@ -173,7 +173,7 @@ def test_watch_text_output(panel_env, no_sleep, monkeypatch, capsys) -> None:
 def test_watch_exits_nonzero_when_unhealthy(panel_env, no_sleep, monkeypatch, capsys) -> None:
     seq = [_data(("s1", "stopped", "dead", 0))] * 2
 
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         return seq.pop(0)
 
     monkeypatch.setattr(server, "_status_data", fake_status)
@@ -186,7 +186,7 @@ def test_watch_json_is_one_object_per_line(panel_env, no_sleep, monkeypatch, cap
 
     seq = [_data(("s1", "running", "healthy", 1)), _data(("s1", "stopped", "dead", 0))]
 
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         return seq.pop(0)
 
     monkeypatch.setattr(server, "_status_data", fake_status)
@@ -200,7 +200,7 @@ def test_watch_json_is_one_object_per_line(panel_env, no_sleep, monkeypatch, cap
 def test_watch_json_suppresses_heartbeat(panel_env, no_sleep, monkeypatch, capsys) -> None:
     seq = [_data(("s1", "running", "healthy", 1))] * 3
 
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         return seq.pop(0)
 
     monkeypatch.setattr(server, "_status_data", fake_status)
@@ -218,7 +218,7 @@ def test_watch_bad_interval(panel_env, capsys) -> None:
 def test_watch_interval_clamped(panel_env, no_sleep, monkeypatch, capsys) -> None:
     seq = [_data(("s1", "running", "healthy", 1))] * 2
 
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         return seq.pop(0)
 
     monkeypatch.setattr(server, "_status_data", fake_status)
@@ -227,7 +227,7 @@ def test_watch_interval_clamped(panel_env, no_sleep, monkeypatch, capsys) -> Non
 
 
 def test_watch_survives_keyboard_interrupt(panel_env, monkeypatch, capsys) -> None:
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         raise KeyboardInterrupt
 
     monkeypatch.setattr(server, "_status_data", fake_status)
@@ -237,7 +237,7 @@ def test_watch_survives_keyboard_interrupt(panel_env, monkeypatch, capsys) -> No
 
 
 def test_watch_reports_panel_error(panel_env, monkeypatch, capsys) -> None:
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         raise RuntimeError("panel down")
 
     monkeypatch.setattr(server, "_status_data", fake_status)
@@ -247,7 +247,7 @@ def test_watch_reports_panel_error(panel_env, monkeypatch, capsys) -> None:
 
 
 def test_single_shot_still_works(panel_env, monkeypatch, capsys) -> None:
-    async def fake_status(sid):
+    async def fake_status(sid, with_backups=False):
         return _data(("s1", "running", "healthy", 1))
 
     monkeypatch.setattr(server, "_status_data", fake_status)

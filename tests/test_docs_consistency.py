@@ -29,6 +29,7 @@ TOP_LEVEL = {
 SUB_OPTIONS = {
     "--no-network", "--json", "--lines", "--grep", "--watch", "--interval",
     "--rounds", "--days", "--top", "--servers", "--confirm", "--in", "--at",
+    "--backups", "--backup-days",
 }
 
 SHORTHANDS = {"-h", "-V", "-v", "help"}

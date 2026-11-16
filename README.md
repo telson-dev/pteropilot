@@ -187,6 +187,18 @@ pteropilot --status --watch --interval 10    # 5–3600 seconds
 pteropilot --status --watch --json           # one JSON object per line, on change only
 ```
 
+Backups are the thing you only miss after a crash, so `--backups` adds a "newest
+backup" column and calls out anything stale (default threshold 7 days):
+
+```bash
+pteropilot --status --backups                 # newest backup age per server
+pteropilot --status --backups --backup-days 30
+```
+
+Failed backups are ignored when computing the age — a backup that cannot be
+restored is not a backup. "Never" (no successful backup) and "unknown" (the backup
+API call failed) are reported differently on purpose.
+
 When a server crashes or a command does nothing, the next question is always "what
 does the console say". `--log` prints that tail straight into your terminal:
 

@@ -63,6 +63,7 @@ def unconfigured(monkeypatch):
     (["--status"], "status"),
     (["--status", "smp", "--json"], "status"),
     (["--status", "--watch", "--interval", "10"], "status"),
+    (["--status", "--backups", "--backup-days", "30"], "status"),
     (["--log", "smp"], "log"),
     (["--log", "smp", "--grep", "err"], "log"),
     (["--players"], "players"),

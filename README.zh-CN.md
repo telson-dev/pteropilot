@@ -166,6 +166,17 @@ pteropilot --status --watch --interval 10    # 间隔 5–3600 秒
 pteropilot --status --watch --json           # 变化时每行一个 JSON 对象
 ```
 
+备份是那种「崩了之后才会想起来」的东西，所以 `--backups` 会在表格里多一列
+「最新备份」，并把过期/从未备份的单独列出来（默认阈值 7 天）：
+
+```bash
+pteropilot --status --backups                 # 每台最新备份是多久以前
+pteropilot --status --backups --backup-days 30
+```
+
+算年龄时会跳过失败的备份——恢复不了的备份不算备份。「从未」（没有成功备份）
+和「未知」（备份接口查询失败）刻意分开显示，不然用户会误判自己的数据状态。
+
 ### 看控制台
 
 服务器崩了、指令没反应，下一步永远是想知道「控制台最后在说什么」。`--log`

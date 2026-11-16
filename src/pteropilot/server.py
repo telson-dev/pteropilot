@@ -17,7 +17,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -2096,7 +2096,64 @@ def _fmt_mb(x: Any) -> str:
     return f"{x / 1024 / 1024:.0f}M" if isinstance(x, (int, float)) and x else "-"
 
 
-async def _status_data(server_id: str | None = None) -> dict:
+async def _backup_fields(ident: str, client) -> dict:
+    """查这台服务器的最新备份，拼成可放进 status 行的字段。
+
+    备份接口单独失败不能连累状态查询——用户至少还该看到 CPU 和状态。
+    """
+    if client is None:
+        return {}
+    try:
+        backups = await client.list_backups(ident)
+    except Exception:  # noqa: BLE001 - 备份查不到就标未知，不影响状态
+        return {"backup_age_days": None, "backup_newest": None, "backup_ok_count": None}
+    newest, age_days, ok_count = _newest_backup_age(backups)
+    return {"backup_age_days": age_days, "backup_newest": newest, "backup_ok_count": ok_count}
+
+
+def _parse_iso_utc(raw: str) -> datetime | None:
+    """解析面板返回的时间戳（``2026-11-15T12:34:56.000000Z``）；认不出返回 None。"""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    if s.endswith("Z") or s.endswith("z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _newest_backup_age(
+    backups: list[dict], now: datetime | None = None
+) -> tuple[str | None, float | None, int]:
+    """从备份列表里挑出**最新的成功备份**，返回 (ISO 时间, 距今天数, 成功数量)。
+
+    只看 ``is_successful`` 为真的——Pterodactyl 里失败/进行中的备份也可能带
+    created_at，拿它当作「有备份」会让用户以为数据安全，实际恢复不了。
+    面板版本较老、没有这个字段时按成功处理（宁可漏判，不要全报「从未备份」）。
+    """
+    moment = now or datetime.now(timezone.utc)
+    best: datetime | None = None
+    ok = 0
+    for b in backups or []:
+        a = b.get("attributes", b) or {}
+        if a.get("is_successful") is False:
+            continue
+        ok += 1
+        dt = _parse_iso_utc(str(a.get("created_at") or ""))
+        if dt is not None and (best is None or dt > best):
+            best = dt
+    if best is None:
+        return None, None, ok
+    days = (moment - best).total_seconds() / 86400
+    return best.isoformat(), max(0.0, days), ok
+
+
+async def _status_data(server_id: str | None = None, with_backups: bool = False) -> dict:
     """服务器状态的结构化结果（CLI ``--status`` 用）。
 
     不复用 ``batch_get_status``：那个只给状态与健康度，命令行最想看的
@@ -2153,6 +2210,7 @@ async def _status_data(server_id: str | None = None) -> dict:
                     "memory_limit": r.get("memory_limit"),
                     "disk_bytes": r.get("disk_bytes"),
                     "players": None,
+                    **(await _backup_fields(ident, panel) if with_backups else {}),
                 }
             )
         except Exception as exc:  # noqa: BLE001 - 单台失败不阻断整体
@@ -2163,6 +2221,23 @@ async def _status_data(server_id: str | None = None) -> dict:
     return {"servers": rows, "errors": errors}
 
 
+def _fmt_backup_age(row: dict) -> str:
+    """把一行里的备份信息渲染成单元格文案。
+
+    ``backup_ok_count`` 为 ``None`` 表示查询本身失败（未知），为 0 表示查到了但
+    一个成功备份都没有（从未）——这两个必须区分开，否则用户会以为「从来没备份过」，
+    而实际只是面板没查通。
+    """
+    if "backup_age_days" not in row:
+        return "-"
+    age = row.get("backup_age_days")
+    if age is None:
+        return "未知" if row.get("backup_ok_count") is None else "从未"
+    if age < 1:
+        return "今天"
+    return f"{age:.0f} 天前"
+
+
 def _format_status(data: dict) -> str:
     """把状态结果排成表（等宽，终端里好读）。"""
     rows = data["servers"]
@@ -2170,8 +2245,12 @@ def _format_status(data: dict) -> str:
         return "(没有可访问的服务器)"
 
     icon = {"healthy": "🟢", "transitional": "🟡", "abnormal": "🔴", "unknown": "⚪"}
+    # 只有显式要了备份信息才多一列，避免默认输出变宽
+    with_backup = any("backup_age_days" in r for r in rows)
     header = f"{'标识':<18} {'名称':<20} {'状态':<12} {'CPU':>7} {'内存':>12} {'玩家':>5}"
-    lines = [header, "-" * 78]
+    if with_backup:
+        header += f" {'最新备份':>10}"
+    lines = [header, "-" * (78 + (11 if with_backup else 0))]
     for r in rows:
         mem = _fmt_mb(r["memory_bytes"])
         lim = r["memory_limit"]
@@ -2179,10 +2258,13 @@ def _format_status(data: dict) -> str:
         cpu = f"{r['cpu']:.1f}%" if isinstance(r["cpu"], (int, float)) else "-"
         players = "-" if r["players"] is None else str(r["players"])
         name = (r["name"] or "")[:20]
-        lines.append(
+        line = (
             f"{r['id'][:18]:<18} {name:<20} "
             f"{icon.get(r['health'], '⚪')} {r['state'][:10]:<10} {cpu:>7} {mem_s:>12} {players:>5}"
         )
+        if with_backup:
+            line += f" {_fmt_backup_age(r):>10}"
+        lines.append(line)
     for e in data["errors"]:
         lines.append(f"  ⚠ {e}")
     return "\n".join(lines)
@@ -2245,6 +2327,7 @@ def _print_help() -> None:
     print("  pteropilot --status smp               单台，附带在线人数")
     print("  pteropilot --status --watch           盯着看，只在状态变化时刷屏")
     print("  pteropilot --status --watch --interval 10   轮询间隔 5–3600 秒")
+    print("  pteropilot --status --backups          附带「最新备份多久以前」并提醒过期的")
     print("  pteropilot --log smp                  控制台末 80 行")
     print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
     print("  pteropilot --log smp --lines 300      往前翻，1–2000 行")
@@ -2271,6 +2354,35 @@ def _print_help() -> None:
     print("文档 https://telson.dev/pteropilot.html　·　教程 https://telson.dev/tutorial.html")
 
 
+def _warn_stale_backups(data: dict, max_days: int) -> None:
+    """把「最新备份太旧 / 从未备份 / 查不到」的服务器单独列出来。
+
+    这一句比表格里的数字更容易被看见——用户扫一眼表格往往只关注红色状态，
+    而「上次备份是 90 天前」在崩溃之后才会变成事故。
+    """
+    never: list[str] = []
+    stale: list[tuple[float, str]] = []
+    unknown: list[str] = []
+    for r in data.get("servers") or []:
+        if "backup_age_days" not in r:
+            continue
+        age = r.get("backup_age_days")
+        if age is None:
+            (unknown if r.get("backup_ok_count") is None else never).append(str(r["id"]))
+        elif age > max_days:
+            stale.append((age, str(r["id"])))
+    if not (never or stale or unknown):
+        print(f"\n备份：全部在 {max_days} 天内有成功备份。")
+        return
+    print(f"\n⚠ 备份提醒（阈值 {max_days} 天）：")
+    for ident in never:
+        print(f"  · {ident}：**从未有过成功备份**")
+    for age, ident in sorted(stale, reverse=True):
+        print(f"  · {ident}：最新备份在 {age:.0f} 天前")
+    for ident in unknown:
+        print(f"  · {ident}：备份列表查询失败（状态未知）")
+
+
 def _run_status(argv: list[str]) -> int:
     """``pteropilot --status [标识]``：不开 MCP 客户端，直接看服务器状态。
 
@@ -2285,6 +2397,8 @@ def _run_status(argv: list[str]) -> int:
 
     as_json = "--json" in argv
     watch = "--watch" in argv
+    # 备份信息要额外请求一次备份接口，所以默认不开
+    with_backups = "--backups" in argv
     try:
         config.validate()
     except ValueError as exc:
@@ -2329,7 +2443,7 @@ def _run_status(argv: list[str]) -> int:
             print(f"[{_stamp()}] 无变化（{ok}/{len(servers)} 正常）", flush=True)
 
         async def _fetch() -> dict:
-            return await _status_data(sid)
+            return await _status_data(sid, with_backups=with_backups)
 
         print(f"每 {interval} 秒检查一次" + (f"，共 {rounds} 轮" if rounds else "") + "，Ctrl+C 退出")
         try:
@@ -2344,7 +2458,7 @@ def _run_status(argv: list[str]) -> int:
             return 1
     else:
         try:
-            data = asyncio.run(_status_data(sid))
+            data = asyncio.run(_status_data(sid, with_backups=with_backups))
         except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊一屏堆栈
             print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
             return 1
@@ -2353,6 +2467,9 @@ def _run_status(argv: list[str]) -> int:
             print(json.dumps(data, ensure_ascii=False, indent=2))
         else:
             print(_format_status(data))
+
+    if with_backups and not as_json:
+        _warn_stale_backups(data, _int_opt("--backup-days", 7, 1, 3650))
 
     if data.get("errors"):
         return 1
