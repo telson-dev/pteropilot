@@ -214,6 +214,17 @@ pteropilot --backups smp                 # newest 20: created / size / state / l
 pteropilot --backups smp --limit 50 --json
 ```
 
+To actually restore one, ask for its one-time download link. You can name the
+backup instead of typing a 36-character UUID (a unique prefix is enough):
+
+```bash
+pteropilot --backup-url smp weekly-1     # prints a one-time URL
+pteropilot --backup-url smp weekly-1 --json
+```
+
+If the name matches more than one backup it lists the candidates and exits 2 —
+restoring the wrong backup is not undoable, so it never guesses.
+
 The scheduled alerter can watch this for you, so you find out without looking:
 
 ```bash

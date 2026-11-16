@@ -5,6 +5,16 @@
 ## [Unreleased]
 
 ### Added
+- CLI `pteropilot --backup-url <标识> <备份名或 UUID> [--json]`：取一次性下载链接
+  - 补完恢复流程最后一环：`--status --backups` 说「过期了」→ `--backups` 列
+    「有哪些」→ 恢复还缺一个链接，而那个能力原来只在 MCP 工具里
+  - 可以按**备份名**指（UUID 36 位没法手打，`--backups` 表格里也没地方放），
+    名字或 UUID 前缀唯一即可
+  - 匹配到多个时列候选并返回 2：恢复错备份不可逆，不猜
+  - 文本输出会提醒「一次性链接，用过即失效，别贴到公开的地方」；
+    `--json` 输出保持纯 JSON，不混人看的提示语
+
+### Added
 - CLI `pteropilot --backups <标识> [--limit N] [--json]`：命令行看备份清单
   - `--status --backups` 只告诉你「最新备份多旧」；看到警告后真正要干的是
     「有哪些备份、哪个能拿来恢复」，而这个能力一直只在 MCP 工具里

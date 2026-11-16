@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # 顶层分发用的大写 flag（main() 里 if "--x" in argv 的那些）
 TOP_LEVEL = {
     "--help", "--version", "--doctor", "--status",
-    "--players", "--log", "--backups", "--broadcast", "--power",
+    "--players", "--log", "--backups", "--backup-url", "--broadcast", "--power",
 }
 
 # 只作为某个子命令的选项存在、不单独分发的 flag

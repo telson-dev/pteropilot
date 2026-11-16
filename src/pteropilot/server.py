@@ -2370,6 +2370,7 @@ def _print_help() -> None:
     print("  pteropilot --status --watch --interval 10   轮询间隔 5–3600 秒")
     print("  pteropilot --status --backups          附带「最新备份多久以前」并提醒过期的")
     print("  pteropilot --backups smp --limit 10   列出备份（创建时间/大小/状态/是否锁定）")
+    print("  pteropilot --backup-url smp weekly-1  取一次性下载链接（备份名可只写前几位）")
     print("  pteropilot --log smp                  控制台末 80 行")
     print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
     print("  pteropilot --log smp --lines 300      往前翻，1–2000 行")
@@ -2645,6 +2646,89 @@ def _run_players(argv: list[str]) -> int:
     return 0 if data.get("samples") else 1
 
 
+def _run_backup_url(argv: list[str]) -> int:
+    """``pteropilot --backup-url <标识> <备份名或 UUID> [--json]``。
+
+    只读：向面板要一个**一次性**下载链接。备份名可以只写前几位（唯一即可），
+    重名或匹配到多个时列候选并返回 2，不猜用户想要哪一个。
+    """
+    sid: str | None = None
+    key: str | None = None
+    if "--backup-url" in argv:
+        i = argv.index("--backup-url")
+        rest = [a for a in argv[i + 1:] if not a.startswith("--")][:2]
+        if len(rest) >= 1:
+            sid = rest[0]
+        if len(rest) >= 2:
+            key = rest[1]
+    if not sid or not key:
+        print("✗ 用法：pteropilot --backup-url <服务器标识> <备份名或 UUID> [--json]",
+              file=sys.stderr)
+        return 2
+
+    as_json = "--json" in argv
+
+    try:
+        config.validate()
+    except ValueError as exc:
+        print(f"pteropilot --backup-url 需要面板配置：{exc}", file=sys.stderr)
+        return 3
+
+    async def _resolve_and_fetch() -> tuple[dict | None, str, list[dict]]:
+        client = PanelClient(config, timeout=30.0)
+        try:
+            backups = await client.list_backups(sid)
+            rows = []
+            for b in backups:
+                a = _attrs(b)
+                rows.append({
+                    "uuid": a.get("uuid") or "",
+                    "name": _name(a),
+                    "created_at": a.get("created_at") or "",
+                })
+            low = key.lower()
+            exact = [r for r in rows if r["uuid"].lower() == low or r["name"].lower() == low]
+            if len(exact) == 1:
+                target = exact[0]
+            else:
+                part = [r for r in rows
+                        if r["uuid"].lower().startswith(low) or r["name"].lower().startswith(low)]
+                target = part[0] if len(part) == 1 else None
+            if target is None:
+                return None, "", exact or part or rows
+            url = await client.backup_download_url(sid, target["uuid"])
+            return target, url, []
+        finally:
+            await client.aclose()
+
+    try:
+        target, url, candidates = asyncio.run(_resolve_and_fetch())
+    except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+        print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+        return 4
+
+    if target is None:
+        if not candidates:
+            print(f"✗ {sid} 没有任何备份", file=sys.stderr)
+            return 4
+        names = "\n".join(f"  - {r['name']}  ({r['uuid'][:8]}…)" for r in candidates[:10])
+        print(f"✗ 没找到唯一匹配「{key}」，候选：\n{names}", file=sys.stderr)
+        return 2
+
+    if not url:
+        print("✗ 面板没返回下载链接（可能备份还没完成）", file=sys.stderr)
+        return 4
+
+    if as_json:
+        print(json.dumps({"server_id": sid, "backup": target, "url": url},
+                         ensure_ascii=False, indent=2))
+    else:
+        print(f"{target['name']}  ({target['uuid'][:8]}…)  创建 {target['created_at'][:16]}")
+        print(url)
+        print("\n⚠ 这是一次性链接：用过即失效，也不要贴到公开的地方。")
+    return 0
+
+
 def _run_backups(argv: list[str]) -> int:
     """``pteropilot --backups <标识> [--limit N] [--json]``。
 
@@ -2735,6 +2819,7 @@ def _run_backups(argv: list[str]) -> int:
         else:
             lines.append(f"（共 {total} 个备份）")
         print("\n".join(lines))
+        print(f"取恢复链接：pteropilot --backup-url {sid} <备份名>")
 
     success = sum(1 for r in rows if r["completed"])
     if not as_json and rows:
@@ -2960,6 +3045,9 @@ def main() -> None:
     # --players：命令行看玩家活跃趋势后退出（只读本机采样，不需要面板配置）
     if "--players" in argv:
         sys.exit(_run_players(argv))
+    # --backup-url：命令行取一次性备份下载链接后退出（不启动 server）
+    if "--backup-url" in argv:
+        sys.exit(_run_backup_url(argv))
     # --backups：命令行看备份清单后退出（不启动 server）
     if "--backups" in argv:
         sys.exit(_run_backups(argv))

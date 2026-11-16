@@ -193,6 +193,16 @@ pteropilot --backups smp                 # 最近 20 个：创建时间 / 大小
 pteropilot --backups smp --limit 50 --json
 ```
 
+真要恢复时还要一个下载链接，可以直接按备份名要（不必手打 36 位 UUID，
+名字或 UUID 前缀唯一就行）：
+
+```bash
+pteropilot --backup-url smp weekly-1     # 打印一次性链接
+pteropilot --backup-url smp weekly-1 --json
+```
+
+名字匹配到多个时它会列候选并返回 2 —— 恢复错备份是不可逆的，所以它不猜。
+
 定时告警也能替你看，不用自己记得查：
 
 ```bash
