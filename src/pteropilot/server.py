@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -2223,6 +2224,14 @@ async def _status_data(server_id: str | None = None, with_backups: bool = False)
     return {"servers": rows, "errors": errors}
 
 
+def _display_width(s: str) -> int:
+    """字符串在等宽终端里占几列（中日韩全角算 2，其余算 1）。
+
+    表格分隔线必须按这个算：用 ``len(s)`` 的话，中文列会让横线比表头短一截。
+    """
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in s)
+
+
 def _fmt_disk(n) -> str:
     """磁盘列用的人类可读格式：≥1G 用 G，否则用 M。
 
@@ -2262,10 +2271,15 @@ def _format_status(data: dict) -> str:
     icon = {"healthy": "🟢", "transitional": "🟡", "abnormal": "🔴", "unknown": "⚪"}
     # 只有显式要了备份信息才多一列，避免默认输出变宽
     with_backup = any("backup_age_days" in r for r in rows)
-    header = f"{'标识':<18} {'名称':<20} {'状态':<12} {'CPU':>7} {'内存':>12} {'磁盘':>12} {'玩家':>5}"
+    # 列全部服务器时 players 恒为 None——整列都是 `-` 只会让人以为坏了。
+    # 有任意一台拿得到人数才显示这一列（单台查询会填 players）。
+    with_players = any(r.get("players") is not None for r in rows)
+    header = f"{'标识':<18} {'名称':<20} {'状态':<12} {'CPU':>7} {'内存':>12} {'磁盘':>12}"
+    if with_players:
+        header += f" {'玩家':>5}"
     if with_backup:
         header += f" {'最新备份':>10}"
-    lines = [header, "-" * (91 + (11 if with_backup else 0))]
+    lines = [header, "-" * _display_width(header)]
     for r in rows:
         mem = _fmt_mb(r["memory_bytes"])
         lim = r["memory_limit"]
@@ -2285,8 +2299,10 @@ def _format_status(data: dict) -> str:
             disk_s = "-"
         line = (
             f"{r['id'][:18]:<18} {name:<20} "
-            f"{icon.get(r['health'], '⚪')} {r['state'][:10]:<10} {cpu:>7} {mem_s:>12} {disk_s:>12} {players:>5}"
+            f"{icon.get(r['health'], '⚪')} {r['state'][:10]:<10} {cpu:>7} {mem_s:>12} {disk_s:>12}"
         )
+        if with_players:
+            line += f" {players:>5}"
         if with_backup:
             line += f" {_fmt_backup_age(r):>10}"
         lines.append(line)
@@ -2428,7 +2444,7 @@ def _run_status(argv: list[str]) -> int:
         config.validate()
     except ValueError as exc:
         print(f"pteropilot --status 需要面板配置：{exc}", file=sys.stderr)
-        return 1
+        return 3   # 配置错要和「服务器真的挂了」区分开
 
     def _int_opt(flag: str, default: int, lo: int, hi: int) -> int:
         if flag not in argv:
@@ -2480,13 +2496,13 @@ def _run_status(argv: list[str]) -> int:
             return 0
         except Exception as exc:  # noqa: BLE001
             print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
-            return 1
+            return 4   # 面板不可达 / 凭据被拒：不是「服务器异常」
     else:
         try:
             data = asyncio.run(_status_data(sid, with_backups=with_backups))
         except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊一屏堆栈
             print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
-            return 1
+            return 4   # 面板不可达 / 凭据被拒：不是「服务器异常」
 
         if as_json:
             print(json.dumps(data, ensure_ascii=False, indent=2))
@@ -2497,7 +2513,8 @@ def _run_status(argv: list[str]) -> int:
         _warn_stale_backups(data, _int_opt("--backup-days", 7, 1, 3650))
 
     if data.get("errors"):
-        return 1
+        # 有服务器查不到：这是「查询侧」的问题，不当成「有服务器异常」
+        return 4
     # 有异常状态的服务器也算非零，方便脚本/cron 判断
     return 0 if all(r["health"] == "healthy" for r in data["servers"]) else 1
 

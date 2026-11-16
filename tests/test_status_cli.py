@@ -93,11 +93,12 @@ def test_status_exit_0_when_all_healthy():
     assert "🟢" in out
 
 
-def test_status_partial_failure_listed_and_exit_1():
+def test_status_partial_failure_listed_and_exit_4():
+    """部分服务器查不到 = 查询侧问题，不当成「有服务器异常」。"""
     f = FakePanel(fail_ids={"s2"})
     _bind(f)
     rc, out, _ = _run(["--status"])
-    assert rc == 1
+    assert rc == 4
     assert "⚠" in out and "s2" in out
     assert "s1" in out                # 单台失败不阻断其余
 
@@ -120,7 +121,7 @@ def test_status_json_has_errors_field():
     _bind(f)
     rc, out, _ = _run(["--status", "--json"])
     d = json.loads(out)
-    assert rc == 1
+    assert rc == 4, "有 errors 字段说明查询侧出问题 → 4"
     assert any("s2" in e for e in d["errors"])
 
 
@@ -184,7 +185,7 @@ def test_status_panel_unreachable(monkeypatch):
 
     _bind(Dead())
     rc, out, err = _run(["--status"])
-    assert rc == 1
+    assert rc == 4, "面板连不上 → 4（配置/网络问题，不是服务器异常）"
     assert "查询失败" in err
 
 

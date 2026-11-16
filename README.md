@@ -173,8 +173,19 @@ pteropilot --status smp          # one server, plus online players (from console
 pteropilot --status --json       # machine-readable
 ```
 
-Exit code `0` only when every server is healthy, `1` otherwise — usable as a cron
-health check. A single failing server is listed as `⚠` and does not hide the rest.
+A single failing server is listed as `⚠` and does not hide the rest.
+
+Exit codes (so a cron job can tell apart "fix your config" from "a server died"):
+
+| Code | Meaning |
+|---|---|
+| `0` | All healthy |
+| `1` | At least one server is in an abnormal state |
+| `2` | Bad argument |
+| `3` | Missing or invalid config (`PANEL_URL` / `PANEL_API_KEY`) |
+| `4` | Panel unreachable, credentials rejected, or some servers could not be queried |
+
+Previously `1` meant both "config is wrong" and "a server is down".
 
 Add `--watch` to keep it running and only reprint when something actually changes
 (CPU and memory wobble every second, so they are deliberately excluded from the

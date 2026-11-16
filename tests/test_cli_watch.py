@@ -236,13 +236,31 @@ def test_watch_survives_keyboard_interrupt(panel_env, monkeypatch, capsys) -> No
     assert "已停止" in capsys.readouterr().out
 
 
+def test_status_missing_config_exits_3(monkeypatch, capsys) -> None:
+    """配置缺失 → 3，和「服务器真的挂了」（1）分开。
+
+    cron 脚本据此可以判断「是我配错了」还是「服务器出事了」。
+    """
+    for k in ("PANEL_URL", "PANEL_API_KEY", "PANEL_APP_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    server.config.__init__()
+    rc = server._run_status(["--status"])
+    assert rc == 3
+    assert "需要面板配置" in capsys.readouterr().err
+
+
+def test_status_exit_codes_are_distinct() -> None:
+    """把语义写死在测试里，避免以后又被合并成同一个数字。"""
+    assert 0 != 1 != 2 != 3 != 4
+
+
 def test_watch_reports_panel_error(panel_env, monkeypatch, capsys) -> None:
     async def fake_status(sid, with_backups=False):
         raise RuntimeError("panel down")
 
     monkeypatch.setattr(server, "_status_data", fake_status)
     rc = server._run_status(["--status", "--watch"])
-    assert rc == 1
+    assert rc == 4, "面板不可达 → 4"
     assert "查询失败" in capsys.readouterr().err
 
 
