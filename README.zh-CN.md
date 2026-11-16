@@ -185,6 +185,14 @@ pteropilot --status --backups                 # 每台最新备份是多久以�
 pteropilot --status --backups --backup-days 30
 ```
 
+看到这个警告之后，人真正想干的是「都有哪些备份、哪个能拿来恢复」——
+`--backups` 按创建时间从新到旧列出来：
+
+```bash
+pteropilot --backups smp                 # 最近 20 个：创建时间 / 大小 / 状态 / 是否锁定
+pteropilot --backups smp --limit 50 --json
+```
+
 定时告警也能替你看，不用自己记得查：
 
 ```bash

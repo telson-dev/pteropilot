@@ -206,6 +206,14 @@ pteropilot --status --backups                 # newest backup age per server
 pteropilot --status --backups --backup-days 30
 ```
 
+When that warning fires, the next question is "which backup can I restore from?"
+— `--backups` lists them, newest first:
+
+```bash
+pteropilot --backups smp                 # newest 20: created / size / state / locked
+pteropilot --backups smp --limit 50 --json
+```
+
 The scheduled alerter can watch this for you, so you find out without looking:
 
 ```bash

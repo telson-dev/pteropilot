@@ -2369,6 +2369,7 @@ def _print_help() -> None:
     print("  pteropilot --status --watch           盯着看，只在状态变化时刷屏")
     print("  pteropilot --status --watch --interval 10   轮询间隔 5–3600 秒")
     print("  pteropilot --status --backups          附带「最新备份多久以前」并提醒过期的")
+    print("  pteropilot --backups smp --limit 10   列出备份（创建时间/大小/状态/是否锁定）")
     print("  pteropilot --log smp                  控制台末 80 行")
     print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
     print("  pteropilot --log smp --lines 300      往前翻，1–2000 行")
@@ -2644,6 +2645,104 @@ def _run_players(argv: list[str]) -> int:
     return 0 if data.get("samples") else 1
 
 
+def _run_backups(argv: list[str]) -> int:
+    """``pteropilot --backups <标识> [--limit N] [--json]``。
+
+    只读。按创建时间从新到旧列，默认 20 条；``--json`` 给机器读。
+    退出码与 ``--status`` 对齐：0 正常 / 2 用法错 / 3 配置缺失 / 4 查询失败。
+    """
+    sid: str | None = None
+    if "--backups" in argv:
+        i = argv.index("--backups")
+        if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            sid = argv[i + 1]
+    if not sid:
+        print("✗ 用法：pteropilot --backups <服务器标识> [--limit N] [--json]", file=sys.stderr)
+        return 2
+
+    limit = 20
+    if "--limit" in argv:
+        i = argv.index("--limit")
+        if i + 1 >= len(argv):
+            print("✗ --limit 后面要跟一个数字", file=sys.stderr)
+            return 2
+        try:
+            limit = int(argv[i + 1])
+        except ValueError:
+            print(f"✗ --limit 需要整数，收到 {argv[i + 1]!r}", file=sys.stderr)
+            return 2
+        limit = max(1, min(500, limit))
+
+    as_json = "--json" in argv
+
+    try:
+        config.validate()
+    except ValueError as exc:
+        print(f"pteropilot --backups 需要面板配置：{exc}", file=sys.stderr)
+        return 3
+
+    async def _fetch() -> list[dict]:
+        client = PanelClient(config, timeout=30.0)
+        try:
+            return await client.list_backups(sid)
+        finally:
+            await client.aclose()
+
+    try:
+        backups = asyncio.run(_fetch())
+    except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+        print(f"✗ 查询失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+        return 4
+
+    rows: list[dict] = []
+    for b in backups:
+        a = _attrs(b)
+        created = a.get("created_at") or ""
+        rows.append({
+            "uuid": a.get("uuid") or "",
+            "name": _name(a),
+            "bytes": a.get("bytes"),
+            "created_at": created,
+            "completed": bool(a.get("completed_at")),
+            "locked": bool(a.get("is_locked")),
+        })
+    # 从新到旧：最可能被拿来恢复的是最近那个
+    rows.sort(key=lambda r: r["created_at"], reverse=True)
+    total = len(rows)
+    shown = rows[:limit]
+
+    if as_json:
+        print(json.dumps(
+            {"server_id": sid, "total": total, "shown": len(shown), "backups": shown},
+            ensure_ascii=False, indent=2,
+        ))
+    elif not rows:
+        print(f"{sid} 还没有任何备份。")
+    else:
+        header = f"{'创建时间':<12} {'大小':>9} {'状态':<6} {'锁定':<7} 名称"
+        lines = [header, "-" * _display_width(header)]
+        for r in shown:
+            created = (r["created_at"] or "")[:16].replace("T", " ")
+            created = created or "-"
+            size = _fmt_size(r["bytes"])
+            state = "完成" if r["completed"] else "进行中"
+            locked = "已锁定" if r["locked"] else "-"
+            lines.append(
+                f"{created:<12} {size:>9} {state:<6} {locked:<7} {r['name'][:40]}"
+            )
+        if total > len(shown):
+            lines.append(f"（显示最近 {len(shown)} 个，共 {total} 个；--limit 可调）")
+        else:
+            lines.append(f"（共 {total} 个备份）")
+        print("\n".join(lines))
+
+    success = sum(1 for r in rows if r["completed"])
+    if not as_json and rows:
+        total_bytes = sum(r["bytes"] for r in rows if isinstance(r["bytes"], (int, float)))
+        print(f"成功 {success} / 共 {total} 个，合计 {_fmt_size(total_bytes)}")
+    return 0
+
+
 def _run_log(argv: list[str]) -> int:
     """``pteropilot --log <标识> [--lines N] [--grep 关键字] [--json]``。
 
@@ -2861,6 +2960,9 @@ def main() -> None:
     # --players：命令行看玩家活跃趋势后退出（只读本机采样，不需要面板配置）
     if "--players" in argv:
         sys.exit(_run_players(argv))
+    # --backups：命令行看备份清单后退出（不启动 server）
+    if "--backups" in argv:
+        sys.exit(_run_backups(argv))
     # --log：命令行看控制台日志后退出（不启动 server）
     if "--log" in argv:
         sys.exit(_run_log(argv))
