@@ -47,7 +47,7 @@ import httpx
 
 from .client import PanelClient, redact
 from .config import Config
-from .server import classify_state, diagnose_crash
+from .server import _newest_backup_age, classify_state, diagnose_crash
 
 DEFAULT_WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 
@@ -165,6 +165,40 @@ def check_resource_thresholds(
     return out
 
 
+def check_backup_age(
+    backups: list[dict], max_days: float, now=None
+) -> list[str]:
+    """按「最新备份多久以前」给出告警说明（空列表 = 正常）。
+
+    只算**成功**的备份：恢复不了的备份不算备份。查询失败在上层就吞掉了，
+    这里只处理「查到了」的情况——所以 ``backups`` 为空意味着真的一个都没有。
+    """
+    if max_days <= 0:
+        return []
+    newest, age_days, ok_count = _newest_backup_age(backups, now)
+    if newest is None:
+        return [f"备份：从未有过成功备份（阈值 {max_days:g} 天）"]
+    assert age_days is not None
+    if age_days <= max_days:
+        return []
+    return [f"备份：最新在 {age_days:.0f} 天前（阈值 {max_days:g} 天，共 {ok_count} 个成功备份）"]
+
+
+async def _backup_details(ident: str, client: PanelClient, max_days: float) -> list[str]:
+    """查一台服务器的备份并判断是否过期；查询失败就当作「不知道」，不告警。
+
+    宁可漏报也不要因为面板一时抽风就推一条「从未备份」——那种假警报会让人
+    直接关掉告警通道。
+    """
+    if max_days <= 0:
+        return []
+    try:
+        backups = await client.list_backups(ident)
+    except Exception:  # noqa: BLE001 - 查不到 ≠ 没备份
+        return []
+    return check_backup_age(backups, max_days)
+
+
 def build_alert_message(server_id: str, state: str, details: list[str]) -> str:
     """构造告警文本（钉钉/企业微信 text 消息兼容）。"""
     lines = [
@@ -233,6 +267,7 @@ async def scan_and_notify(
     dry_run: bool = False,
     cpu_threshold: float = 0.0,
     memory_threshold: float = 0.0,
+    backup_days: float = 0.0,
 ) -> dict:
     """扫描全部可访问服务器，异常者逐台推送告警（webhook 和/或邮件）。
 
@@ -246,6 +281,8 @@ async def scan_and_notify(
     dry_run: 演练模式——不真的推送/发邮件，也不写状态文件；返回里给出「将会通知哪些服务器」。
     cpu_threshold / memory_threshold: >0 时启用资源阈值告警（CPU 百分比、内存使用率百分比）。
         状态正常但资源超限的服务器也会告警，合成状态记为 ``high_load``。
+    backup_days: >0 时启用备份过期告警——最新成功备份比这个天数还旧（或从来没有）
+        的服务器也会告警，合成状态记为 ``stale_backup``。备份接口查询失败不告警。
     返回 {checked, abnormal, notified, planned, plans, suppressed, pending, errors}。
     """
     cfg = Config()
@@ -301,16 +338,20 @@ async def scan_and_notify(
                 res_bad: list[str] = []
                 if not state_bad and (cpu_threshold > 0 or memory_threshold > 0):
                     res_bad = check_resource_thresholds(res, cpu_threshold, memory_threshold)
-                if not state_bad and not res_bad:
+                backup_bad: list[str] = []
+                if not state_bad and backup_days > 0:
+                    backup_bad = await _backup_details(ident, client, backup_days)
+                if not state_bad and not res_bad and not backup_bad:
                     # 健康：清零连续确认计数
                     if state is not None and ident in state:
                         state[ident]["hits"] = 0
                     continue
                 abnormal += 1
-                if res_bad:
-                    # 合成状态：真实状态是 running，但对外说「负载异常」更准确
-                    # （否则标题会写成「状态异常（running）」，读起来矛盾）
-                    state_now = "high_load" if not state_bad else state_now
+                # 合成状态：真实状态是 running，但对外说「负载异常」「备份过期」
+                # 更准确（否则标题会写成「状态异常（running）」，读起来矛盾）。
+                # 真·异常状态优先，不被合成状态盖掉。
+                if not state_bad:
+                    state_now = "high_load" if res_bad else "stale_backup"
 
                 prev = (state or {}).get(ident, {}) if state else {}
                 hits = int(prev.get("hits") or 0) + 1
@@ -333,6 +374,8 @@ async def scan_and_notify(
                 details = [f"健康度: {state_now}"]
                 if res_bad:
                     details.extend(res_bad)
+                if backup_bad:
+                    details.extend(backup_bad)
                 if include_log_signals:
                     try:
                         diag = await diagnose_crash_for(ident, client, timeout)
@@ -567,6 +610,13 @@ def main() -> None:
         default=0.0,
         help="内存使用率阈值（%%）：超过即告警，0=关闭（默认）。不限额的服务器跳过",
     )
+    parser.add_argument(
+        "--backup-days",
+        type=float,
+        default=0.0,
+        help="备份过期阈值（天）：最新成功备份比这更旧（或从未备份）即告警，0=关闭（默认）。"
+             "备份接口查询失败不告警",
+    )
     parser.add_argument("--dry-run", action="store_true", help="演练模式：只打印将会通知哪些服务器，不真的推送/发邮件、不写状态文件")
     parser.add_argument("--json", action="store_true", help="以 JSON 输出结果（机器可读，便于 cron/监控脚本解析）")
     parser.add_argument("--test", action="store_true", help="发一条测试通知验证渠道配置（webhook/邮件是否配对），不读服务器、不写状态")
@@ -605,6 +655,7 @@ def main() -> None:
             dry_run=args.dry_run,
             cpu_threshold=args.cpu,
             memory_threshold=args.memory,
+            backup_days=args.backup_days,
         )
     )
     channels = []

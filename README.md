@@ -195,6 +195,17 @@ pteropilot --status --backups                 # newest backup age per server
 pteropilot --status --backups --backup-days 30
 ```
 
+The scheduled alerter can watch this for you, so you find out without looking:
+
+```bash
+pteropilot-alerts --webhook https://... --backup-days 7
+```
+
+A server whose newest successful backup is older than the threshold (or that has
+never had one) is reported with a synthesized `stale_backup` state. If the backup
+API itself fails, **no alert is raised** — a false "never backed up" would train
+you to ignore the channel.
+
 Failed backups are ignored when computing the age — a backup that cannot be
 restored is not a backup. "Never" (no successful backup) and "unknown" (the backup
 API call failed) are reported differently on purpose.

@@ -174,6 +174,15 @@ pteropilot --status --backups                 # 每台最新备份是多久以�
 pteropilot --status --backups --backup-days 30
 ```
 
+定时告警也能替你看，不用自己记得查：
+
+```bash
+pteropilot-alerts --webhook https://... --backup-days 7
+```
+
+最新成功备份比阈值更旧（或从来没有）的服务器会以 `stale_backup` 状态推送。
+如果备份接口本身查询失败，**不告警**——假警报只会让用户把整个告警通道关掉。
+
 算年龄时会跳过失败的备份——恢复不了的备份不算备份。「从未」（没有成功备份）
 和「未知」（备份接口查询失败）刻意分开显示，不然用户会误判自己的数据状态。
 
