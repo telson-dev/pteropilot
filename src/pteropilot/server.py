@@ -2375,6 +2375,7 @@ def _print_help() -> None:
     print("  pteropilot --log \"*\"                 所有服务器一起看（也支持 a,b 逗号列表）")
     print("  pteropilot --players                  本机有采样记录的服务器")
     print("  pteropilot --players smp --days 7     近 7 天在线时长排行（离线也能看）")
+    print("  pteropilot --players --record         现在采一条样写进历史（可挂 cron 积累）")
     print("  （以上都支持 --json，输出机器可读）")
     print()
     print("动手（写操作，重要的要加 --confirm）")
@@ -2519,6 +2520,62 @@ def _run_status(argv: list[str]) -> int:
     return 0 if all(r["health"] == "healthy" for r in data["servers"]) else 1
 
 
+def _record_players(sid: str | None, *, as_json: bool) -> int:
+    """采一条玩家在线样并写入本地历史；``sid=None`` 表示全部可访问服务器。
+
+    这个功能需要面板（要读控制台推断谁在线），所以和 ``--players`` 的其余用法
+    不同：缺配置时返回 3，面板出错返回 4，与 ``--status`` 的语义保持一致。
+    """
+    try:
+        config.validate()
+    except ValueError as exc:
+        print(f"pteropilot --players --record 需要面板配置：{exc}", file=sys.stderr)
+        return 3
+
+    async def _collect() -> tuple[list[dict], list[str]]:
+        ids = await _resolve_target_ids(["*"] if not sid else [sid])
+        rows: list[dict] = []
+        errors: list[str] = []
+        client = PanelClient(config, timeout=20.0)
+        try:
+            async def _one(ident: str) -> None:
+                try:
+                    players = await client.online_players(ident)
+                except Exception as exc:  # noqa: BLE001 - 单台失败不阻断其余
+                    errors.append(f"{ident}: {type(exc).__name__}")
+                    return
+                written = playerlog.record(ident, players)
+                rows.append({"server_id": ident, "players": players, "written": written})
+
+            await _gather_bounded(_one, ids)
+        finally:
+            await client.aclose()
+        rows.sort(key=lambda r: r["server_id"])
+        return rows, errors
+
+    try:
+        rows, errors = asyncio.run(_collect())
+    except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+        print(f"✗ 采样失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+        return 4
+
+    if as_json:
+        print(json.dumps({"recorded": rows, "errors": errors}, ensure_ascii=False, indent=2))
+    elif not rows:
+        print("（没有可访问的服务器）" if not errors else "（全部服务器都采样失败）")
+    else:
+        for r in rows:
+            n = len(r["players"])
+            if r["written"]:
+                print(f"{r['server_id']}: 记下一条采样（{n} 人在线）")
+            else:
+                print(f"{r['server_id']}: 与上一条相同（{n} 人），跳过")
+    for e in errors:
+        print(f"  ⚠ {e}", file=sys.stderr)
+
+    return 0 if not errors else 4
+
+
 def _run_players(argv: list[str]) -> int:
     """``pteropilot --players [标识] [--days N] [--top N] [--json]``。
 
@@ -2554,6 +2611,10 @@ def _run_players(argv: list[str]) -> int:
     except ValueError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 2
+
+    # --record：现在就去面板采一条样写进本地历史
+    if "--record" in argv:
+        return _record_players(sid, as_json=as_json)
 
     # 不给标识：列出本地有采样记录的服务器
     if sid is None:

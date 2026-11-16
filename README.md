@@ -268,8 +268,18 @@ or nothing matched `--grep`) — handy for `until pteropilot --log smp --grep St
 `2` means the argument itself was wrong.
 
 Player activity is logged locally every time `list_players` runs (one sample per
-call, in `~/.pteropilot/playerlog/`). `--players` reads those files directly, so it
-needs **no panel config and no network** — it still works when the panel is down:
+call, in `~/.pteropilot/playerlog/`). If you only use the CLI, that history would
+never accumulate — `--record` takes a sample right now, so you can build it from
+cron without opening an AI client:
+
+```bash
+pteropilot --players --record          # sample every accessible server
+pteropilot --players smp --record      # just this one
+*/30 * * * * pteropilot --players --record    # half-hourly history
+```
+
+`--players` reads those files directly, so it needs **no panel config and no
+network** — it still works when the panel is down:
 
 ```bash
 pteropilot --players                    # which servers have local samples

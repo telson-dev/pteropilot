@@ -243,8 +243,16 @@ pteropilot --log "*" --grep error --json   # {servers: [...], grep: ...}
 ### 玩家历史
 
 玩家活跃度在每次 `list_players` 被调用时记到本机（一次调用一条采样，存在
-`~/.pteropilot/playerlog/`）。`--players` 直接读这些文件，**不需要面板配置、
-不需要联网**——面板挂了也照样能看：
+`~/.pteropilot/playerlog/`）。如果你只用命令行，这份历史永远不会积累——
+`--record` 马上就采一条，于是不打开 AI 客户端也能用 cron 攒出历史：
+
+```bash
+pteropilot --players --record          # 所有可访问服务器各采一条
+pteropilot --players smp --record      # 只采这一台
+*/30 * * * * pteropilot --players --record    # 每半小时一条
+```
+
+`--players` 直接读这些文件，**不需要面板配置、不需要联网**——面板挂了也照样能看：
 
 ```bash
 pteropilot --players                 # 本机有采样记录的服务器
