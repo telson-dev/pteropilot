@@ -168,7 +168,7 @@ pteropilot --broadcast "say brb" --in 5m                        # wait 5 minutes
 ## Look at your servers without an AI client
 
 ```bash
-pteropilot --status              # every server: state, health, CPU, memory
+pteropilot --status              # every server: state, health, CPU, memory, disk
 pteropilot --status smp          # one server, plus online players (from console log)
 pteropilot --status --json       # machine-readable
 ```

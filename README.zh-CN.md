@@ -148,7 +148,7 @@ pteropilot --broadcast "say 马上回来" --in 5m                    # 等 5 分
 ## 不开 AI 也能看状态
 
 ```bash
-pteropilot --status              # 全部服务器：状态、健康度、CPU、内存
+pteropilot --status              # 全部服务器：状态、健康度、CPU、内存、磁盘
 pteropilot --status smp          # 单台，额外读日志推断在线玩家数
 pteropilot --status --json       # 结构化输出
 ```

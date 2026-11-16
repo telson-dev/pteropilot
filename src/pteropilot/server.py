@@ -2180,6 +2180,7 @@ async def _status_data(server_id: str | None = None, with_backups: bool = False)
                     "memory_bytes": r.get("memory_bytes"),
                     "memory_limit": r.get("memory_limit"),
                     "disk_bytes": r.get("disk_bytes"),
+                    "disk_limit": r.get("disk_limit"),
                     "players": players_n,
                 }
             ],
@@ -2209,6 +2210,7 @@ async def _status_data(server_id: str | None = None, with_backups: bool = False)
                     "memory_bytes": r.get("memory_bytes"),
                     "memory_limit": r.get("memory_limit"),
                     "disk_bytes": r.get("disk_bytes"),
+                    "disk_limit": r.get("disk_limit"),
                     "players": None,
                     **(await _backup_fields(ident, panel) if with_backups else {}),
                 }
@@ -2219,6 +2221,19 @@ async def _status_data(server_id: str | None = None, with_backups: bool = False)
     await _gather_bounded(_one, servers)
     rows.sort(key=lambda x: x["id"])
     return {"servers": rows, "errors": errors}
+
+
+def _fmt_disk(n) -> str:
+    """磁盘列用的人类可读格式：≥1G 用 G，否则用 M。
+
+    不复用 ``_fmt_size``：那个是给网络流量/备份大小用的（``1.0 MB`` 带空格），
+    表格里每列都占宽度，``102400.0 MB`` 会把表撑变形。这里输出 ``100G`` / ``512M``。
+    """
+    if not isinstance(n, (int, float)):
+        return "-"
+    if n >= 1024 ** 3:
+        return f"{n / 1024 ** 3:.1f}G".replace(".0G", "G")
+    return f"{n / 1024 ** 2:.0f}M"
 
 
 def _fmt_backup_age(row: dict) -> str:
@@ -2247,10 +2262,10 @@ def _format_status(data: dict) -> str:
     icon = {"healthy": "🟢", "transitional": "🟡", "abnormal": "🔴", "unknown": "⚪"}
     # 只有显式要了备份信息才多一列，避免默认输出变宽
     with_backup = any("backup_age_days" in r for r in rows)
-    header = f"{'标识':<18} {'名称':<20} {'状态':<12} {'CPU':>7} {'内存':>12} {'玩家':>5}"
+    header = f"{'标识':<18} {'名称':<20} {'状态':<12} {'CPU':>7} {'内存':>12} {'磁盘':>12} {'玩家':>5}"
     if with_backup:
         header += f" {'最新备份':>10}"
-    lines = [header, "-" * (78 + (11 if with_backup else 0))]
+    lines = [header, "-" * (91 + (11 if with_backup else 0))]
     for r in rows:
         mem = _fmt_mb(r["memory_bytes"])
         lim = r["memory_limit"]
@@ -2258,9 +2273,19 @@ def _format_status(data: dict) -> str:
         cpu = f"{r['cpu']:.1f}%" if isinstance(r["cpu"], (int, float)) else "-"
         players = "-" if r["players"] is None else str(r["players"])
         name = (r["name"] or "")[:20]
+        # 磁盘和内存同样处理：有上限就显示 used/limit，没有就只显示 used。
+        # 磁盘写满会让存档写不进去，是游戏服务器最常见的事故之一，
+        # 而 disk_bytes 之前取了却从来没显示过。
+        disk = r.get("disk_bytes")
+        dlim = r.get("disk_limit")
+        if isinstance(disk, (int, float)):
+            disk_s = (f"{_fmt_disk(disk)}/{_fmt_disk(dlim)}"
+                      if isinstance(dlim, (int, float)) and dlim > 0 else _fmt_disk(disk))
+        else:
+            disk_s = "-"
         line = (
             f"{r['id'][:18]:<18} {name:<20} "
-            f"{icon.get(r['health'], '⚪')} {r['state'][:10]:<10} {cpu:>7} {mem_s:>12} {players:>5}"
+            f"{icon.get(r['health'], '⚪')} {r['state'][:10]:<10} {cpu:>7} {mem_s:>12} {disk_s:>12} {players:>5}"
         )
         if with_backup:
             line += f" {_fmt_backup_age(r):>10}"
