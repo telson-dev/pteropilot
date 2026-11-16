@@ -5,6 +5,15 @@
 ## [Unreleased]
 
 ### Added
+- `--doctor` 校验调优环境变量（`PTEROPILOT_CONCURRENCY` / `PTEROPILOT_RETRIES` /
+  `PTEROPILOT_RETRY_BASE` / `PANEL_READONLY`）
+  - 这些变量取值非法时都是**静默**回退默认值，用户不会知道设置没生效；
+    现在会明确说「999 超过上限，已按 32 处理」
+  - **`PANEL_READONLY` 是安全相关的**：只认 `1`/`true`/`yes`/`on`，
+    写成 `enabled` / `y` / `readonly` 会被当成关闭——用户以为锁上了写操作，
+    其实没有。这条现在会作为问题报出来并退出 1
+
+### Added
 - `--doctor` 会校验 `~/.pteropilot/alerts.json`
   - 拼错的键原来被**静默忽略**：告警永远不响、也没有任何提示，
     是最难自查的一类故障。现在会指出键名并给「你是不是想写 X？」

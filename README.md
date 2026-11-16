@@ -241,6 +241,11 @@ server whose disk is nearly full cannot write its world saves, and that failure
 is silent until something breaks. Servers without a disk quota on the panel are
 skipped rather than scored against zero.
 
+`--doctor` also validates the tuning knobs. They all fall back silently when
+misconfigured, and `PANEL_READONLY` is the dangerous one: only `1`/`true`/`yes`/`on`
+enable it, so `PANEL_READONLY=enabled` leaves writes **unlocked** while looking
+like protection.
+
 A misspelled key in this file is silently ignored, which means the alert never
 fires and nothing tells you why. `pteropilot --doctor` validates the file and
 suggests the intended key ("did you mean `cpu_threshold`?"), so

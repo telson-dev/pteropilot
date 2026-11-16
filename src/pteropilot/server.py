@@ -1729,6 +1729,62 @@ _ALERTS_KEYS = (_ALERTS_FLOAT_KEYS | _ALERTS_INT_KEYS
                 | _ALERTS_BOOL_KEYS | _ALERTS_STR_KEYS)
 
 
+_READONLY_TRUTHY = ("1", "true", "yes", "on")
+_READONLY_FALSY = ("0", "false", "no", "off", "")
+
+
+def check_env_knobs(env: dict) -> dict:
+    """校验可调环境变量，返回 {lines, problems, hints}。
+
+    这类变量取值非法时都是**静默**回退默认值，用户不会知道自己的设置没生效。
+    其中 ``PANEL_READONLY`` 最危险：写成 ``enabled`` / ``y`` / ``readonly`` 都会被
+    当成关闭，而用户很可能以为已经把写操作锁上了。
+    """
+    lines: list[str] = []
+    problems: list[str] = []
+    hints: list[str] = []
+
+    def _raw(name: str) -> str:
+        return (env.get(name) or "").strip()
+
+    def _number(name: str, default, lo, hi, kind=int, unit: str = "") -> None:
+        raw = _raw(name)
+        if not raw:
+            return
+        try:
+            val = kind(raw)
+        except ValueError:
+            lines.append(f"{name}: {raw!r} 不是合法数字，已按默认 {default}{unit}处理")
+            hints.append(f"{name} 应该是一个{'整数' if kind is int else '数字'}，可以删掉它用默认值")
+            return
+        if val < lo:
+            lines.append(f"{name}: {raw} 小于下限，已按 {lo}{unit} 处理")
+        elif val > hi:
+            lines.append(f"{name}: {raw} 超过上限，已按 {hi}{unit} 处理")
+        else:
+            lines.append(f"{name}: {val}{unit} ✅")
+
+    _number("PTEROPILOT_CONCURRENCY", 8, 1, 32)
+    _number("PTEROPILOT_RETRIES", 2, 0, 5)
+    _number("PTEROPILOT_RETRY_BASE", 0.5, 0.0, 5.0, kind=float, unit=" 秒")
+
+    ro = _raw("PANEL_READONLY")
+    if ro:
+        low = ro.lower()
+        if low in _READONLY_TRUTHY:
+            lines.append("PANEL_READONLY: 开启 ✅（所有写操作会被拒绝）")
+        elif low in _READONLY_FALSY:
+            lines.append("PANEL_READONLY: 关闭")
+        else:
+            # 这条不是「小瑕疵」：用户以为锁上了，其实没有
+            problems.append(
+                f"PANEL_READONLY={ro!r} 无法识别，当前按**关闭**处理——"
+                "如果你本意是只读，写操作其实没有被拦"
+            )
+            hints.append("只读请写成 PANEL_READONLY=1（也接受 true / yes / on）")
+    return {"lines": lines, "problems": problems, "hints": hints}
+
+
 def _check_alerts_config(path: Path) -> dict:
     """校验 ``alerts.json``，返回 {status, lines, problems, hints}。
 
@@ -1886,6 +1942,13 @@ def _run_doctor(skip_network: bool = False) -> int:
     # 3) 只读模式
     if config.readonly:
         print("PANEL_READONLY: 开启（所有写操作会被拒绝）")
+
+    # 3.1) 可调环境变量：取值非法时都是静默回退默认值，用户不会知道
+    _ek = check_env_knobs(dict(os.environ))
+    for _line in _ek["lines"]:
+        print(_line)
+    problems.extend(_ek["problems"])
+    hints.extend(_ek["hints"])
 
     # 3.2) 告警配置自检：拼错一个键，告警就永远不响且毫无提示，
     #      这类「配了但没生效」只能靠 doctor 主动查出来。

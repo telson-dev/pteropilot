@@ -215,6 +215,10 @@ pteropilot-alerts --webhook https://... --backup-days 7
 `--disk` 和 `--cpu` / `--memory` 同一套逻辑：磁盘快满时服务器写不进存档，
 而这件事在真的坏掉之前一直是静默的。面板没给磁盘配额的服务器跳过，不拿 0 当分母。
 
+`--doctor` 也会校验几个调优环境变量。它们配错时全是静默回退，其中
+`PANEL_READONLY` 最危险：只认 `1`/`true`/`yes`/`on`，写成
+`PANEL_READONLY=enabled` 看起来像上了锁，实际**写操作没被拦**。
+
 这个文件里**拼错一个键会被静默忽略**——告警永远不响，而且没有任何提示。
 `pteropilot --doctor` 会校验它并给出「你是不是想写 cpu_threshold？」这样的建议，
 让「配了但没生效」变成能查出来的问题。
