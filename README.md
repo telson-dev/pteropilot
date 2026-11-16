@@ -130,8 +130,8 @@ Since v0.2.34 the doctor also compares your build against the latest GitHub
 release and prints the exact upgrade command when you are behind:
 
 ```
-版本：v0.2.20 → 最新 v0.2.33（落后）
-  · 装的是旧版：最新 v0.2.33，当前 v0.2.20。升级命令：
+版本：v0.2.20 → 最新 v0.2.34（落后）
+  · 装的是旧版：最新 v0.2.34，当前 v0.2.20。升级命令：
       uv tool install --force https://github.com/telson-dev/pteropilot/releases/latest/download/pteropilot-0.2.33-py3-none-any.whl
 ```
 
@@ -282,7 +282,7 @@ refusals carry `reason` (`readonly` / `need_confirm` / `empty_command` / `no_run
 
 ```bash
 pteropilot --version
-# pteropilot v0.2.33 (45 MCP tools)
+# pteropilot v0.2.34 (45 MCP tools)
 ```
 
 **If the tool count looks low you are on an old build.** PyPI may lag behind
@@ -412,7 +412,7 @@ Targets both **Pterodactyl v1** and **Pelican**. Every client/application endpoi
 
 ## Status & roadmap
 
-Current release: **v0.2.33** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
+Current release: **v0.2.34** (see [CHANGELOG](CHANGELOG.md)). See [ROADMAP](ROADMAP.md) for what's next. Full setup guide, panel config examples, and troubleshooting in [docs/](docs/README.md).
 
 ## Security
 

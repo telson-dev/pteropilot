@@ -242,7 +242,7 @@ pteropilot --players smp --top 5 --json
 
 ```bash
 pteropilot --version
-# 输出：pteropilot v0.2.33（45 个 MCP 工具）
+# 输出：pteropilot v0.2.34（45 个 MCP 工具）
 ```
 
 **工具数不对就是版本旧了。** PyPI 上的包可能滞后（最新能力在 GitHub Release 里），

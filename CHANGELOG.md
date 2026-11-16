@@ -4,6 +4,66 @@
 
 ## [Unreleased]
 
+## [0.2.34] - 2026-11-16
+
+这一版几乎全在「不开 AI 客户端也能用」和「告警别误报」两条线上。
+
+### Added
+
+- CLI `pteropilot --players [标识] [--days N] [--top N] [--json]`：命令行看玩家活跃趋势
+  - 直接读本机采样文件（`~/.pteropilot/playerlog/`），**不需要面板配置、不需要联网**
+  - 面板挂了也照样能看历史
+- CLI `pteropilot --log <标识> [--lines N] [--grep 关键字] [--json]`：命令行看控制台日志
+  - 服务器崩了、指令没反应时最想知道的就是这个，原来只能开 AI 客户端问
+  - `--grep` 不区分大小写，命中 0 行时退出码 1（可写 `until ... --grep Started` 等待脚本）
+  - 输出前清掉 ANSI 颜色和 `\r`，管道与粘贴都不乱
+  - **多台**：`--log "*"`（全部可访问服务器）或 `--log a,b`；并发取、单台失败单独标注
+- `--status --watch [--interval N]`：轮询状态，**只在真的变化时刷屏**
+  - CPU / 内存每秒都在抖，刻意排除在变化检测之外——否则会一直重画，反而看不出何时出事
+  - `--json` 模式下变化时每行一个对象（NDJSON），心跳被抑制
+- `--status --backups [--backup-days N]`：多一列「最新备份」，并把过期的单独点名
+  - 备份是那种崩了之后才会想起来的东厄；失败的备份不算备份
+  - 「从未」（没有成功备份）与「未知」（备份接口查询失败）分开显示
+- CLI `pteropilot --help` / `-h`：命令行速查，**不依赖面板配置**
+  - 以前这里会走启动流程、报「需要设置 PANEL_URL」然后退出 1
+- `pteropilot-alerts --backup-days N`：备份过期主动推送（合成状态 `stale_backup`）
+  - 备份接口查询失败不告警——假警报会让人把整个告警通道关掉
+- 三个阈值（`cpu_threshold` / `memory_threshold` / `backup_days`）支持在
+  `~/.pteropilot/alerts.json` 里按服务器覆盖
+  - 优先级：服务器条目 > `default` 段 > 命令行参数
+  - 重负载的整合包服 85% CPU 是常态，小大厅服 50% 就该看一眼——一个全局数字必然误报
+- `--doctor` 会对比 GitHub 最新 release，落后时给出可直接复制的升级命令
+  - 查 GitHub 而不是 PyPI：PyPI 可能长期滞后，拿它当「最新」会得出相反结论
+- 静态检查：引入 ruff，只开「会变成 bug 的」规则（未定义名 / 未使用导入与变量等），
+  并接进 pytest，CI 自动生效
+
+### Changed
+
+- 批量工具加**并发上限**（默认 8，`PTEROPILOT_CONCURRENCY` 可调，夹在 1–32）
+  - 此前是无限并发：20 台服务器就是 20 条连接同时打进单实例面板，容易 429
+- 只读请求遇 429 / 502 / 503 / 504 或连接错误时**自动退避重试**（默认额外 2 次）
+  - 尊重 `Retry-After`（夹到 5 秒），否则指数退避 + 抖动
+  - **写操作一律不重试**：补发一次被限流的 `stop`、或重发一次响应丢了的 `delete`，
+    比让用户看到错误危险得多
+
+### Fixed
+
+- `alerts.py` 用了 `sys.stderr` 却从未 `import sys`——`--reset` 删除状态文件失败时
+  会崩成 NameError 堆栈，而不是「❌ 删除失败：…」
+- `server.py` 的 `import re` 只写在三个函数内部，模块顶层没有——`--log` 一跑到
+  ANSI 清理那行就 NameError（`py_compile` 查不出来，编译期不求值）
+- `--in nan` / `--in inf` 会让 `time.sleep()` 抛未捕获异常：`float("nan")` 是合法的，
+  `nan <= 0` 与 `nan > 上限` 都是 False，于是一路走到 `sleep(nan)`。现在非有限值直接拒绝
+- `--doctor` 的版本行与 `--version` 措辞不统一（同一次输出里「45 个 MCP 工具」和
+  「45 个工具」两种说法，让人以为装了两个版本）
+
+### Notes
+
+- 测试从 545 涨到 782，覆盖率 96.6%（CI 门槛 90%）
+- PyPI 上的包仍停在 0.2.0（账号找回中，见 issue pypi/support#12940）；
+  最新 wheel 请从 GitHub Releases 下载
+
+
 ## [0.2.33] - 2026-11-15
 
 ### Added
