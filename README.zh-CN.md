@@ -183,6 +183,22 @@ pteropilot-alerts --webhook https://... --backup-days 7
 最新成功备份比阈值更旧（或从来没有）的服务器会以 `stale_backup` 状态推送。
 如果备份接口本身查询失败，**不告警**——假警报只会让用户把整个告警通道关掉。
 
+三个阈值（`cpu_threshold` / `memory_threshold` / `backup_days`）都能在
+`~/.pteropilot/alerts.json` 里按服务器单独覆盖，因为一个全局数字不可能同时
+适配「重负载整合包服」和「小大厅服」：
+
+```json
+{
+  "default": { "cpu_threshold": 85, "memory_threshold": 90, "backup_days": 7 },
+  "servers": {
+    "heavy-modpack": { "cpu_threshold": 97, "memory_threshold": 98 },
+    "tiny-lobby":    { "cpu_threshold": 60, "backup_days": 2 }
+  }
+}
+```
+
+优先级：服务器条目 > `default` 段 > 命令行参数。
+
 算年龄时会跳过失败的备份——恢复不了的备份不算备份。「从未」（没有成功备份）
 和「未知」（备份接口查询失败）刻意分开显示，不然用户会误判自己的数据状态。
 

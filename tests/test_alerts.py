@@ -303,17 +303,49 @@ def test_server_effective_precedence():
     assert alerts.server_effective(cfg, "s1", 1, 0, "abnormal", webhook="https://w", smtp_to="t@x.com") == {
         "confirm_count": 3, "cooldown_minutes": 15, "min_level": "abnormal",
         "webhook": True, "email": False, "webhook_url": "https://w", "mail_to": "t@x.com",
+        # 阈值也在这张表里返回，默认 0 = 关闭
+        "cpu_threshold": 0.0, "memory_threshold": 0.0, "backup_days": 0.0,
     }
     # 无服务器条目 → 用 default
     assert alerts.server_effective(cfg, "s2", 1, 0, "abnormal", webhook="https://w") == {
         "confirm_count": 2, "cooldown_minutes": 15, "min_level": "abnormal",
         "webhook": True, "email": False, "webhook_url": "https://w", "mail_to": "",
+        "cpu_threshold": 0.0, "memory_threshold": 0.0, "backup_days": 0.0,
     }
     # 无配置 → 用参数
     assert alerts.server_effective({}, "s2", 5, 30, "error", webhook="", email_enabled=True, smtp_to="b@x.com") == {
         "confirm_count": 5, "cooldown_minutes": 30, "min_level": "error",
         "webhook": False, "email": True, "webhook_url": "", "mail_to": "b@x.com",
+        "cpu_threshold": 0.0, "memory_threshold": 0.0, "backup_days": 0.0,
     }
+
+
+def test_server_effective_thresholds_precedence():
+    """阈值同样遵循：服务器条目 > default > 命令行参数。
+
+    重负载的整合包服 90% CPU 是常态，小服 50% 就该看一眼——所以必须能按服务器调。
+    """
+    cfg = {
+        "default": {"cpu_threshold": 80, "backup_days": 3},
+        "servers": {"heavy": {"cpu_threshold": 95, "memory_threshold": 97}},
+    }
+    eff = alerts.server_effective(cfg, "heavy", 1, 0, "abnormal", cpu_threshold=50, memory_threshold=60, backup_days=7)
+    assert eff["cpu_threshold"] == 95.0, "服务器条目优先"
+    assert eff["memory_threshold"] == 97.0
+    assert eff["backup_days"] == 3.0, "没在服务器条目里 → 用 default"
+
+    other = alerts.server_effective(cfg, "small", 1, 0, "abnormal", cpu_threshold=50, memory_threshold=60, backup_days=7)
+    assert other["cpu_threshold"] == 80.0, "没在服务器条目里 → 用 default"
+    assert other["memory_threshold"] == 60.0, "default 里没有 → 用命令行参数"
+    assert other["backup_days"] == 3.0
+
+
+def test_server_effective_thresholds_coerced_to_float():
+    """JSON 里写 "85" 或 null 都要能用，不能把字符串带到比较里。"""
+    cfg = {"servers": {"s1": {"cpu_threshold": "85", "memory_threshold": None}}}
+    eff = alerts.server_effective(cfg, "s1", 1, 0, "abnormal")
+    assert eff["cpu_threshold"] == 85.0 and isinstance(eff["cpu_threshold"], float)
+    assert eff["memory_threshold"] == 0.0, "null 当作关闭"
 
 
 async def test_per_server_confirm_count(fake, env_panel, monkeypatch, tmp_path):

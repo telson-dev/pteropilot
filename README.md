@@ -206,6 +206,22 @@ never had one) is reported with a synthesized `stale_backup` state. If the backu
 API itself fails, **no alert is raised** — a false "never backed up" would train
 you to ignore the channel.
 
+All three thresholds (`cpu_threshold`, `memory_threshold`, `backup_days`) can be
+overridden per server in `~/.pteropilot/alerts.json`, because one global number
+cannot fit both a heavy modpack and a tiny lobby:
+
+```json
+{
+  "default": { "cpu_threshold": 85, "memory_threshold": 90, "backup_days": 7 },
+  "servers": {
+    "heavy-modpack": { "cpu_threshold": 97, "memory_threshold": 98 },
+    "tiny-lobby":    { "cpu_threshold": 60, "backup_days": 2 }
+  }
+}
+```
+
+Precedence is server entry > `default` > command-line flag.
+
 Failed backups are ignored when computing the age — a backup that cannot be
 restored is not a backup. "Never" (no successful backup) and "unknown" (the backup
 API call failed) are reported differently on purpose.

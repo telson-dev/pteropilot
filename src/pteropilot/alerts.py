@@ -84,6 +84,9 @@ def server_effective(
     webhook: str = "",
     email_enabled: bool = False,
     smtp_to: str = "",
+    cpu_threshold: float = 0.0,
+    memory_threshold: float = 0.0,
+    backup_days: float = 0.0,
 ) -> dict:
     """合并服务器配置：服务器条目 > default 段 > 命令行/函数参数。
 
@@ -99,10 +102,19 @@ def server_effective(
         "email": email_enabled,
         "webhook_url": webhook,
         "mail_to": smtp_to,
+        "cpu_threshold": cpu_threshold,
+        "memory_threshold": memory_threshold,
+        "backup_days": backup_days,
     }
     dft = cfg.get("default") or {}
     srv = (cfg.get("servers") or {}).get(server_id) or {}
-    for key in ("confirm_count", "cooldown_minutes", "min_level", "webhook", "email", "webhook_url", "mail_to"):
+    for key in (
+        "confirm_count", "cooldown_minutes", "min_level",
+        "webhook", "email", "webhook_url", "mail_to",
+        # 三个阈值也能按服务器覆盖：重负载的整合包服 90% CPU 是常态，
+        # 小服 50% 就该看一眼——全局一个数字必然有人被误报有人漏报。
+        "cpu_threshold", "memory_threshold", "backup_days",
+    ):
         if key in dft:
             merged[key] = dft[key]
         if key in srv:
@@ -111,6 +123,8 @@ def server_effective(
     merged["cooldown_minutes"] = float(merged["cooldown_minutes"])
     merged["webhook"] = bool(merged["webhook"])
     merged["email"] = bool(merged["email"])
+    for key in ("cpu_threshold", "memory_threshold", "backup_days"):
+        merged[key] = float(merged[key] or 0)
     return merged
 
 
@@ -326,6 +340,8 @@ async def scan_and_notify(
                 eff = server_effective(
                     alerts_cfg, ident, confirm_count, cooldown_minutes, min_level,
                     webhook=webhook, email_enabled=email_enabled, smtp_to=smtp_to,
+                    cpu_threshold=cpu_threshold, memory_threshold=memory_threshold,
+                    backup_days=backup_days,
                 )
                 abnormal_states = {"error", "suspended"} if eff["min_level"] == "error" else {"offline", "error", "suspended"}
                 cc = eff["confirm_count"]
@@ -335,12 +351,16 @@ async def scan_and_notify(
                 level, _hint = classify_state(state_now)
                 state_bad = level == "abnormal" and state_now in abnormal_states
                 # 状态正常也不代表没事：CPU 打满、内存快满时同样值得叫人
+                # 阈值走合并后的 eff，这样 alerts.json 能按服务器单独调
+                eff_cpu = eff["cpu_threshold"]
+                eff_mem = eff["memory_threshold"]
+                eff_backup = eff["backup_days"]
                 res_bad: list[str] = []
-                if not state_bad and (cpu_threshold > 0 or memory_threshold > 0):
-                    res_bad = check_resource_thresholds(res, cpu_threshold, memory_threshold)
+                if not state_bad and (eff_cpu > 0 or eff_mem > 0):
+                    res_bad = check_resource_thresholds(res, eff_cpu, eff_mem)
                 backup_bad: list[str] = []
-                if not state_bad and backup_days > 0:
-                    backup_bad = await _backup_details(ident, client, backup_days)
+                if not state_bad and eff_backup > 0:
+                    backup_bad = await _backup_details(ident, client, eff_backup)
                 if not state_bad and not res_bad and not backup_bad:
                     # 健康：清零连续确认计数
                     if state is not None and ident in state:
