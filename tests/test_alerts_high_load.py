@@ -115,8 +115,8 @@ async def test_thresholds_zero_skips_resource_check(fake, env_panel, sent, monke
     """
     calls: list[tuple] = []
 
-    def spy(res, cpu_threshold=0.0, memory_threshold=0.0):
-        calls.append((cpu_threshold, memory_threshold))
+    def spy(res, cpu_threshold=0.0, memory_threshold=0.0, disk_threshold=0.0):
+        calls.append((cpu_threshold, memory_threshold, disk_threshold))
         return []
 
     monkeypatch.setattr(alerts, "check_resource_thresholds", spy)
@@ -136,8 +136,8 @@ async def test_thresholds_nonzero_does_call_check(fake, env_panel, sent, monkeyp
     """对照组：给了阈值就一定要算（否则上一条测试可能因为压根没走到而假通过）。"""
     calls: list[tuple] = []
 
-    def spy(res, cpu_threshold=0.0, memory_threshold=0.0):
-        calls.append((cpu_threshold, memory_threshold))
+    def spy(res, cpu_threshold=0.0, memory_threshold=0.0, disk_threshold=0.0):
+        calls.append((cpu_threshold, memory_threshold, disk_threshold))
         return []
 
     monkeypatch.setattr(alerts, "check_resource_thresholds", spy)
@@ -148,7 +148,7 @@ async def test_thresholds_nonzero_does_call_check(fake, env_panel, sent, monkeyp
     await alerts.scan_and_notify(
         "https://hook.example/send", cpu_threshold=85, include_log_signals=False,
     )
-    assert calls == [(85, 0.0)]
+    assert calls == [(85, 0.0, 0.0)], "CPU 阈值应当被传下去（磁盘阈值默认为 0）"
 
 
 async def test_abnormal_state_wins_over_resource_check(fake, env_panel, sent):

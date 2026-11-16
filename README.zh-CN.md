@@ -183,13 +183,16 @@ pteropilot-alerts --webhook https://... --backup-days 7
 最新成功备份比阈值更旧（或从来没有）的服务器会以 `stale_backup` 状态推送。
 如果备份接口本身查询失败，**不告警**——假警报只会让用户把整个告警通道关掉。
 
-三个阈值（`cpu_threshold` / `memory_threshold` / `backup_days`）都能在
-`~/.pteropilot/alerts.json` 里按服务器单独覆盖，因为一个全局数字不可能同时
-适配「重负载整合包服」和「小大厅服」：
+`--disk` 和 `--cpu` / `--memory` 同一套逻辑：磁盘快满时服务器写不进存档，
+而这件事在真的坏掉之前一直是静默的。面板没给磁盘配额的服务器跳过，不拿 0 当分母。
+
+四个阈值（`cpu_threshold` / `memory_threshold` / `disk_threshold` / `backup_days`）
+都能在 `~/.pteropilot/alerts.json` 里按服务器单独覆盖，因为一个全局数字不可能
+同时适配「重负载整合包服」和「小大厅服」：
 
 ```json
 {
-  "default": { "cpu_threshold": 85, "memory_threshold": 90, "backup_days": 7 },
+  "default": { "cpu_threshold": 85, "memory_threshold": 90, "disk_threshold": 85, "backup_days": 7 },
   "servers": {
     "heavy-modpack": { "cpu_threshold": 97, "memory_threshold": 98 },
     "tiny-lobby":    { "cpu_threshold": 60, "backup_days": 2 }

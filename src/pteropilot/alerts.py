@@ -47,7 +47,7 @@ import httpx
 
 from .client import PanelClient, redact
 from .config import Config
-from .server import _newest_backup_age, classify_state, diagnose_crash
+from .server import _fmt_disk, _newest_backup_age, classify_state, diagnose_crash
 
 DEFAULT_WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 
@@ -87,6 +87,7 @@ def server_effective(
     cpu_threshold: float = 0.0,
     memory_threshold: float = 0.0,
     backup_days: float = 0.0,
+    disk_threshold: float = 0.0,
 ) -> dict:
     """合并服务器配置：服务器条目 > default 段 > 命令行/函数参数。
 
@@ -105,6 +106,7 @@ def server_effective(
         "cpu_threshold": cpu_threshold,
         "memory_threshold": memory_threshold,
         "backup_days": backup_days,
+        "disk_threshold": disk_threshold,
     }
     dft = cfg.get("default") or {}
     srv = (cfg.get("servers") or {}).get(server_id) or {}
@@ -113,7 +115,7 @@ def server_effective(
         "webhook", "email", "webhook_url", "mail_to",
         # 三个阈值也能按服务器覆盖：重负载的整合包服 90% CPU 是常态，
         # 小服 50% 就该看一眼——全局一个数字必然有人被误报有人漏报。
-        "cpu_threshold", "memory_threshold", "backup_days",
+        "cpu_threshold", "memory_threshold", "backup_days", "disk_threshold",
     ):
         if key in dft:
             merged[key] = dft[key]
@@ -123,7 +125,7 @@ def server_effective(
     merged["cooldown_minutes"] = float(merged["cooldown_minutes"])
     merged["webhook"] = bool(merged["webhook"])
     merged["email"] = bool(merged["email"])
-    for key in ("cpu_threshold", "memory_threshold", "backup_days"):
+    for key in ("cpu_threshold", "memory_threshold", "backup_days", "disk_threshold"):
         merged[key] = float(merged[key] or 0)
     return merged
 
@@ -147,7 +149,10 @@ def save_state(path: Path, state: dict) -> None:
 
 
 def check_resource_thresholds(
-    res: dict, cpu_threshold: float = 0.0, memory_threshold: float = 0.0
+    res: dict,
+    cpu_threshold: float = 0.0,
+    memory_threshold: float = 0.0,
+    disk_threshold: float = 0.0,
 ) -> list[str]:
     """按阈值检查一台服务器的资源占用，返回超限说明（空列表 = 正常）。
 
@@ -175,6 +180,22 @@ def check_resource_thresholds(
             out.append(
                 f"内存 {mem / 1024 / 1024:.0f} / {mem_lim / 1024 / 1024:.0f} MB"
                 f"（{pct:.0f}% ≥ 阈值 {memory_threshold:g}%）"
+            )
+
+    # 磁盘和内存同一套口径：面板给 disk_limit（0 = 不限制），不限额就跳过
+    disk = r.get("disk_bytes")
+    disk_lim = r.get("disk_limit")
+    if (
+        disk_threshold > 0
+        and isinstance(disk, (int, float))
+        and isinstance(disk_lim, (int, float))
+        and disk_lim > 0
+    ):
+        pct = disk / disk_lim * 100
+        if pct >= disk_threshold:
+            out.append(
+                f"磁盘 {_fmt_disk(disk)} / {_fmt_disk(disk_lim)}"
+                f"（{pct:.0f}% ≥ 阈值 {disk_threshold:g}%）"
             )
     return out
 
@@ -282,6 +303,7 @@ async def scan_and_notify(
     cpu_threshold: float = 0.0,
     memory_threshold: float = 0.0,
     backup_days: float = 0.0,
+    disk_threshold: float = 0.0,
 ) -> dict:
     """扫描全部可访问服务器，异常者逐台推送告警（webhook 和/或邮件）。
 
@@ -297,6 +319,8 @@ async def scan_and_notify(
         状态正常但资源超限的服务器也会告警，合成状态记为 ``high_load``。
     backup_days: >0 时启用备份过期告警——最新成功备份比这个天数还旧（或从来没有）
         的服务器也会告警，合成状态记为 ``stale_backup``。备份接口查询失败不告警。
+    disk_threshold: >0 时启用磁盘使用率告警（百分比）。面板没给磁盘配额时跳过，
+        与 CPU / 内存同一套口径。
     返回 {checked, abnormal, notified, planned, plans, suppressed, pending, errors}。
     """
     cfg = Config()
@@ -341,7 +365,7 @@ async def scan_and_notify(
                     alerts_cfg, ident, confirm_count, cooldown_minutes, min_level,
                     webhook=webhook, email_enabled=email_enabled, smtp_to=smtp_to,
                     cpu_threshold=cpu_threshold, memory_threshold=memory_threshold,
-                    backup_days=backup_days,
+                    backup_days=backup_days, disk_threshold=disk_threshold,
                 )
                 abnormal_states = {"error", "suspended"} if eff["min_level"] == "error" else {"offline", "error", "suspended"}
                 cc = eff["confirm_count"]
@@ -355,9 +379,10 @@ async def scan_and_notify(
                 eff_cpu = eff["cpu_threshold"]
                 eff_mem = eff["memory_threshold"]
                 eff_backup = eff["backup_days"]
+                eff_disk = eff["disk_threshold"]
                 res_bad: list[str] = []
-                if not state_bad and (eff_cpu > 0 or eff_mem > 0):
-                    res_bad = check_resource_thresholds(res, eff_cpu, eff_mem)
+                if not state_bad and (eff_cpu > 0 or eff_mem > 0 or eff_disk > 0):
+                    res_bad = check_resource_thresholds(res, eff_cpu, eff_mem, eff_disk)
                 backup_bad: list[str] = []
                 if not state_bad and eff_backup > 0:
                     backup_bad = await _backup_details(ident, client, eff_backup)
@@ -631,6 +656,12 @@ def main() -> None:
         help="内存使用率阈值（%%）：超过即告警，0=关闭（默认）。不限额的服务器跳过",
     )
     parser.add_argument(
+        "--disk",
+        type=float,
+        default=0.0,
+        help="磁盘使用率阈值（%%）：超过即告警，0=关闭（默认）。面板没给磁盘配额的服务器跳过",
+    )
+    parser.add_argument(
         "--backup-days",
         type=float,
         default=0.0,
@@ -676,6 +707,7 @@ def main() -> None:
             cpu_threshold=args.cpu,
             memory_threshold=args.memory,
             backup_days=args.backup_days,
+            disk_threshold=args.disk,
         )
     )
     channels = []

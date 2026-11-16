@@ -305,18 +305,21 @@ def test_server_effective_precedence():
         "webhook": True, "email": False, "webhook_url": "https://w", "mail_to": "t@x.com",
         # 阈值也在这张表里返回，默认 0 = 关闭
         "cpu_threshold": 0.0, "memory_threshold": 0.0, "backup_days": 0.0,
+        "disk_threshold": 0.0,
     }
     # 无服务器条目 → 用 default
     assert alerts.server_effective(cfg, "s2", 1, 0, "abnormal", webhook="https://w") == {
         "confirm_count": 2, "cooldown_minutes": 15, "min_level": "abnormal",
         "webhook": True, "email": False, "webhook_url": "https://w", "mail_to": "",
         "cpu_threshold": 0.0, "memory_threshold": 0.0, "backup_days": 0.0,
+        "disk_threshold": 0.0,
     }
     # 无配置 → 用参数
     assert alerts.server_effective({}, "s2", 5, 30, "error", webhook="", email_enabled=True, smtp_to="b@x.com") == {
         "confirm_count": 5, "cooldown_minutes": 30, "min_level": "error",
         "webhook": False, "email": True, "webhook_url": "", "mail_to": "b@x.com",
         "cpu_threshold": 0.0, "memory_threshold": 0.0, "backup_days": 0.0,
+        "disk_threshold": 0.0,
     }
 
 

@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Added
+- `pteropilot-alerts --disk <pct>`：**磁盘使用率告警**
+  - `check_resource_thresholds` 的 docstring 里早就写着「内存/磁盘用使用率」，
+    但磁盘那一项从来没实现过——文档承诺了、代码没给
+  - 与 CPU / 内存同一套口径：等于阈值即告警、面板没配额则跳过
+  - 同样支持在 `alerts.json` 里按服务器覆盖（`disk_threshold`）
 - `--status` 表格新增**磁盘**列：此前 `disk_bytes` 一直在取、却从来没显示过
   - 有配额时显示 `3G/10G`，无配额时只显示已用（`512M`）
   - 磁盘写满会让存档写不进去，是游戏服务器最常见的事故之一
