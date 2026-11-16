@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from pteropilot.alerts import check_resource_thresholds
 

@@ -52,7 +52,32 @@ dev = [
   "pytest-cov>=7.1.0",
   "fastapi>=0.115",
   "uvicorn>=0.30",
+  "ruff>=0.17",
 ]
+
+# 只开「会变成 bug 的」规则，不开风格规则。
+# 起因：两次在错误分支里漏了 import（server.py 缺 re、alerts.py 缺 sys），
+# 都是真实用户会撞到的 NameError，但平时跑不到那条路，测试全绿。
+# 风格规则（缩进、引号、import 排序）不在这里管，免得一改就是几百条噪音。
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "F821",  # 未定义的名字（NameError 的主要来源）
+  "F822",  # __all__ 里写了不存在的名字
+  "F823",  # 局部变量在赋值前被引用
+  "F811",  # 重复定义（后面的悄悄覆盖前面的）
+  "F402",  # 推导式变量覆盖外层同名变量
+  "F401",  # 导入但没用的
+  "F841",  # 赋值了但没用的局部变量（测试里常常意味着漏了断言）
+  "E9",    # 语法层面错误
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试里有时故意 import 了给副作用用
+"tests/*" = []
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

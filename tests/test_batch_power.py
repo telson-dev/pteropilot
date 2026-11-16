@@ -13,7 +13,6 @@ start 免确认、非法 signal、只读拦截（不发任何请求）。
 from __future__ import annotations
 
 import httpx
-import pytest
 
 import pteropilot.server as srv
 from pteropilot.client import PanelClient

@@ -8,7 +8,6 @@ batch_backup：写操作，整体二次确认 + 只读拒绝，逐台创建、�
 
 from __future__ import annotations
 
-import httpx
 import pteropilot.server as srv
 from pteropilot.client import PanelClient
 from pteropilot.config import Config

@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import sys
 
 import pytest
 
@@ -55,6 +54,7 @@ def test_doctor_shows_url_normalization(monkeypatch, capsys):
         env={"PANEL_URL": "https://panel.example.com/api/", "PANEL_API_KEY": "ptlc_x"},
     )
     out = capsys.readouterr().out
+    assert code == 0, "配置齐全 + --no-network 时应当返回 0"
     assert "已自动规范化" in out
     assert "https://panel.example.com/api/" in out
 

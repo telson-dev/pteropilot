@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 
 import httpx
-import pytest
 
 import pteropilot.server as srv
 from pteropilot.client import PanelClient

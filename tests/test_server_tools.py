@@ -392,7 +392,6 @@ async def test_list_backups_size_and_created(fake):
 
 def test_main_validate_error(monkeypatch, capsys):
     # 配置缺失时 main() 走启动失败分支
-    import sys
 
     monkeypatch.setattr(srv.config, "panel_url", "")
     monkeypatch.setattr(srv.config, "panel_api_key", "")

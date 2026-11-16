@@ -166,6 +166,8 @@ def test_cli_servers_filter(fake, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert [sid for sid, _ in fake.sent] == ["b"]
+    assert "- b |" in out, "--servers 过滤后，输出里应当只有 b"
+    assert "- a |" not in out, "没被选中的服务器不该出现在明细里"
 
 
 def test_cli_dangerous_needs_confirm(fake, capsys):
@@ -181,6 +183,7 @@ def test_cli_dangerous_with_confirm(fake, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert len(fake.sent) == 2
+    assert "成功 2" in out, "确认后应当报告广播成功的台数"
 
 
 # ---------------- CLI --json ----------------

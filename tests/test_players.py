@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import httpx
-import pytest
 
 import pteropilot.server as srv
 from pteropilot.client import PanelClient, parse_join, parse_leave
