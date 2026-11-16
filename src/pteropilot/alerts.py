@@ -67,7 +67,7 @@ def load_alerts_config(path: Path | None) -> dict:
     if path is None:
         path = default_config_file()
     try:
-        cfg = json.loads(path.read_text(encoding="utf-8"))
+        cfg = json.loads(path.read_text(encoding="utf-8-sig"))   # 接受 Windows 记事本写的 BOM
         if isinstance(cfg, dict):
             return cfg
         return {}
@@ -132,7 +132,7 @@ def server_effective(
 
 def load_state(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))   # 同上：接受 BOM
     except Exception:
         return {}
 

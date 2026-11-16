@@ -19,6 +19,7 @@ import sys
 import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -1717,6 +1718,127 @@ def _latest_release_version(timeout: float = 5.0) -> str | None:
         return None
 
 
+_ALERTS_FLOAT_KEYS = {
+    "cooldown_minutes", "cpu_threshold", "memory_threshold",
+    "backup_days", "disk_threshold",
+}
+_ALERTS_INT_KEYS = {"confirm_count"}
+_ALERTS_BOOL_KEYS = {"webhook", "email"}
+_ALERTS_STR_KEYS = {"min_level", "webhook_url", "mail_to"}
+_ALERTS_KEYS = (_ALERTS_FLOAT_KEYS | _ALERTS_INT_KEYS
+                | _ALERTS_BOOL_KEYS | _ALERTS_STR_KEYS)
+
+
+def _check_alerts_config(path: Path) -> dict:
+    """校验 ``alerts.json``，返回 {status, lines, problems, hints}。
+
+    status: ``off``（没配，属于正常）/ ``ok`` / ``bad``（配了但有问题）。
+    拼错的键会给出「你是不是想写 X」的建议——静默忽略是最坏的结果。
+    """
+    import difflib
+    import json as _json
+
+    out: dict = {"status": "off", "lines": [], "problems": [], "hints": []}
+    if not path.exists():
+        out["lines"].append(f"告警配置：未设置（{path.name} 不存在，告警不会触发）")
+        return out
+
+    try:
+        data = _json.loads(path.read_text(encoding="utf-8-sig"))   # 记事本会写 BOM
+    except OSError as exc:
+        out["status"] = "bad"
+        out["problems"].append(f"告警配置读不出来：{exc}")
+        return out
+    except _json.JSONDecodeError as exc:
+        out["status"] = "bad"
+        out["problems"].append(
+            f"告警配置不是合法 JSON：第 {exc.lineno} 行第 {exc.colno} 列 —— {exc.msg}"
+        )
+        out["hints"].append("用 python -m json.tool ~/.pteropilot/alerts.json 定位语法错误")
+        return out
+
+    if not isinstance(data, dict):
+        out["status"] = "bad"
+        out["problems"].append("告警配置的顶层应该是一个 JSON 对象（{...}）")
+        return out
+
+    problems: list[str] = []
+
+    def _suggest(key: str) -> str:
+        near = difflib.get_close_matches(key, sorted(_ALERTS_KEYS), n=1, cutoff=0.6)
+        return f"，你是不是想写 {near[0]}？" if near else ""
+
+    def _check_section(where: str, section: object) -> None:
+        if not isinstance(section, dict):
+            problems.append(f"告警配置 {where} 应该是一个对象")
+            return
+        for key, value in section.items():
+            if key not in _ALERTS_KEYS:
+                problems.append(f"告警配置 {where} 里有不认识的键 {key!r}{_suggest(key)}")
+                continue
+            # bool 是 int 的子类：True 不该被当成合格的整数
+            if key in _ALERTS_INT_KEYS:
+                if isinstance(value, bool) or not isinstance(value, int):
+                    problems.append(f"告警配置 {where}.{key} 应该是整数，实际是 {type(value).__name__}")
+            elif key in _ALERTS_FLOAT_KEYS and not isinstance(value, (int, float)):
+                problems.append(f"告警配置 {where}.{key} 应该是数字，实际是 {type(value).__name__}")
+            elif key in _ALERTS_BOOL_KEYS and not isinstance(value, bool):
+                problems.append(f"告警配置 {where}.{key} 应该是 true/false，实际是 {type(value).__name__}")
+            elif key in _ALERTS_STR_KEYS and not isinstance(value, str):
+                problems.append(f"告警配置 {where}.{key} 应该是字符串，实际是 {type(value).__name__}")
+
+    for key, value in data.items():
+        if key not in ("default", "servers"):
+            # 顶层键单独给建议池：写成 "server"（少个 s）是最常见的手误
+            near = difflib.get_close_matches(
+                key, ["default", "servers"], n=1, cutoff=0.6
+            )
+            hint = f"，你是不是想写 {near[0]}？" if near else ""
+            problems.append(f"告警配置顶层有不认识的键 {key!r}{hint}")
+
+    if "default" in data:
+        _check_section("default", data["default"])
+    if "servers" in data:
+        servers = data["servers"]
+        if not isinstance(servers, dict):
+            problems.append("告警配置 servers 应该是一个对象（服务器标识 → 配置）")
+        else:
+            for sid, cfg in servers.items():
+                _check_section(f"servers.{sid}", cfg)
+
+    # min_level 的取值也要对，否则等于关掉了某一档
+    for where, section in (("default", data.get("default")), ("", None)):
+        if isinstance(section, dict) and "min_level" in section:
+            lv = section["min_level"]
+            if isinstance(lv, str) and lv not in ("abnormal", "error"):
+                problems.append(
+                    f"告警配置 {where}.min_level 只能是 abnormal 或 error，当前 {lv!r}"
+                )
+    for sid, cfg in (data.get("servers") or {}).items() if isinstance(data.get("servers"), dict) else []:
+        if isinstance(cfg, dict) and "min_level" in cfg:
+            lv = cfg["min_level"]
+            if isinstance(lv, str) and lv not in ("abnormal", "error"):
+                problems.append(
+                    f"告警配置 servers.{sid}.min_level 只能是 abnormal 或 error，当前 {lv!r}"
+                )
+
+    if problems:
+        out["status"] = "bad"
+        out["problems"].extend(problems)
+        out["hints"].append(
+            "被忽略的键不会报错、只是永远不生效——这正是「配了但没告警」的常见原因"
+        )
+        return out
+
+    n_servers = len(data.get("servers") or {}) if isinstance(data.get("servers"), dict) else 0
+    n_keys = sum(len(v) for v in data.values() if isinstance(v, dict))
+    out["status"] = "ok"
+    out["lines"].append(
+        f"告警配置：✅ 合法（{path.name}，{n_servers} 台服务器单独配置，共 {n_keys} 项）"
+    )
+    return out
+
+
 def _run_doctor(skip_network: bool = False) -> int:
     """环境自检：Python 版本、配置、密钥前缀、面板连通、告警配置。
 
@@ -1764,6 +1886,19 @@ def _run_doctor(skip_network: bool = False) -> int:
     # 3) 只读模式
     if config.readonly:
         print("PANEL_READONLY: 开启（所有写操作会被拒绝）")
+
+    # 3.2) 告警配置自检：拼错一个键，告警就永远不响且毫无提示，
+    #      这类「配了但没生效」只能靠 doctor 主动查出来。
+    # 函数内导入：alerts 反向依赖 server，顶层导入会形成循环
+    from . import alerts as _alerts_mod
+
+    _ac = _check_alerts_config(_alerts_mod.default_config_file())
+    for _line in _ac["lines"]:
+        print(_line)
+    if _ac["status"] == "bad":
+        for _p in _ac["problems"]:
+            problems.append(_p)
+        hints.extend(_ac["hints"])
 
     # 3.5) 版本新鲜度：装得比最新 release 旧时明确告知怎么升
     #      放这里而不是最后，因为配置不全时下面会提前 return，而「装了旧版」

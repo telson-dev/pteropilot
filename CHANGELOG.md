@@ -5,6 +5,19 @@
 ## [Unreleased]
 
 ### Added
+- `--doctor` 会校验 `~/.pteropilot/alerts.json`
+  - 拼错的键原来被**静默忽略**：告警永远不响、也没有任何提示，
+    是最难自查的一类故障。现在会指出键名并给「你是不是想写 X？」
+  - 也检查类型（confirm_count 要整数、webhook 要 true/false…）、
+    `min_level` 的取值、以及 JSON 语法错误（带行列号）
+
+### Fixed
+- **带 UTF-8 BOM 的 `alerts.json` / 状态文件会让配置静默失效**：
+  Windows 记事本与 PowerShell 5.1 保存的 JSON 默认带 BOM，
+  `read_text("utf-8")` + `json.loads` 直接报错，而 alerts.py 里的
+  `except Exception: return {}` 把它吞成了「没有配置」——用户配好的
+  告警于是永远不触发。读取统一改用 `utf-8-sig`
+### Added
 - CLI `pteropilot --backup-url <标识> <备份名或 UUID> [--json]`：取一次性下载链接
   - 补完恢复流程最后一环：`--status --backups` 说「过期了」→ `--backups` 列
     「有哪些」→ 恢复还缺一个链接，而那个能力原来只在 MCP 工具里

@@ -215,6 +215,10 @@ pteropilot-alerts --webhook https://... --backup-days 7
 `--disk` 和 `--cpu` / `--memory` 同一套逻辑：磁盘快满时服务器写不进存档，
 而这件事在真的坏掉之前一直是静默的。面板没给磁盘配额的服务器跳过，不拿 0 当分母。
 
+这个文件里**拼错一个键会被静默忽略**——告警永远不响，而且没有任何提示。
+`pteropilot --doctor` 会校验它并给出「你是不是想写 cpu_threshold？」这样的建议，
+让「配了但没生效」变成能查出来的问题。
+
 四个阈值（`cpu_threshold` / `memory_threshold` / `disk_threshold` / `backup_days`）
 都能在 `~/.pteropilot/alerts.json` 里按服务器单独覆盖，因为一个全局数字不可能
 同时适配「重负载整合包服」和「小大厅服」：

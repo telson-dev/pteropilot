@@ -241,6 +241,11 @@ server whose disk is nearly full cannot write its world saves, and that failure
 is silent until something breaks. Servers without a disk quota on the panel are
 skipped rather than scored against zero.
 
+A misspelled key in this file is silently ignored, which means the alert never
+fires and nothing tells you why. `pteropilot --doctor` validates the file and
+suggests the intended key ("did you mean `cpu_threshold`?"), so
+"configured but never fires" is diagnosable.
+
 All four thresholds (`cpu_threshold`, `memory_threshold`, `disk_threshold`,
 `backup_days`) can be overridden per server in `~/.pteropilot/alerts.json`,
 because one global number cannot fit both a heavy modpack and a tiny lobby:
