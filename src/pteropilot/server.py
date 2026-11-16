@@ -2626,7 +2626,7 @@ def _run_players(argv: list[str]) -> int:
             ))
         elif not servers:
             print("本机还没有任何玩家采样记录。")
-            print("先在 AI 客户端里调用两次 list_players（每次会记一条采样），再回来看趋势。")
+            print("补一条：pteropilot --players --record      # 或挂 cron 定期采")
         else:
             print(f"本机有玩家采样记录的服务器（{len(servers)} 台）:")
             for s, n in servers:

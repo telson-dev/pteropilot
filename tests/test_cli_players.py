@@ -130,7 +130,7 @@ def test_unknown_server_exits_nonzero(tmp_path: Path, monkeypatch, capsys) -> No
     from pteropilot.server import _run_players
 
     assert _run_players(["--players", "never-seen"]) == 1
-    assert "还没有玩家活跃记录" in capsys.readouterr().out
+    assert "还没有任何采样记录" in capsys.readouterr().out
 
 
 def test_bad_days_exits_2(tmp_path: Path, monkeypatch, capsys) -> None:

@@ -144,7 +144,8 @@ def test_stats_trim_keeps_newest(tmp_path, monkeypatch):
 
 def test_format_empty_hint():
     text = playerlog.format_stats("srv-1", {"samples": 0, "players": []})
-    assert "还没有玩家活跃记录" in text
+    assert "还没有任何采样记录" in text
+    assert "--record" in text, "空状态要指出补采命令，而不是只说没数据"
 
 
 def test_format_contains_ranking_and_caveat(tmpdir):
@@ -180,4 +181,4 @@ def test_player_stats_tool_returns_hint_when_no_data(monkeypatch, tmp_path):
 
     monkeypatch.setattr(server.playerlog, "DEFAULT_DIR", tmp_path)
     out = asyncio.run(server.player_stats("never-seen", days=7))
-    assert "还没有玩家活跃记录" in out
+    assert "还没有任何采样记录" in out

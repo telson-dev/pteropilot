@@ -143,11 +143,14 @@ def stats(
         hours        24 长度数组，各小时「有人在线」的采样次数（本地时区）
         first / last 采样时间范围（ISO 字符串，可能为 None）
         truncated    是否因为文件上限丢过历史
+        total        全时段采样条数（不受 days 限制）
+        last_any     全时段最新一条采样时间（ISO，可能为 None）
     """
     path = log_path(server_id, directory)
     empty = {
         "samples": 0, "unique": 0, "players": [], "hours": [0] * 24,
         "first": None, "last": None, "truncated": False,
+        "total": 0, "last_any": None,
     }
     if not path.exists():
         return empty
@@ -156,6 +159,8 @@ def stats(
     cutoff = now_utc - timedelta(days=max(1, int(days)))
 
     rows: list[tuple[datetime, list[str]]] = []
+    total = 0
+    last_any: str | None = None
     try:
         with path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -167,7 +172,12 @@ def stats(
                 except json.JSONDecodeError:
                     continue
                 ts = _parse(row.get("t", ""))
-                if ts is None or ts < cutoff:
+                if ts is None:
+                    continue
+                # 全时段计数：用来区分「一条都没有」和「都在窗口外」
+                total += 1
+                last_any = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if ts < cutoff:
                     continue
                 rows.append((ts, list(row.get("p") or [])))
     except OSError:
@@ -180,7 +190,7 @@ def stats(
         pass
 
     if not rows:
-        return {**empty, "truncated": truncated}
+        return {**empty, "truncated": truncated, "total": total, "last_any": last_any}
 
     rows.sort(key=lambda r: r[0])
     local_tz = datetime.now().astimezone().tzinfo
@@ -224,15 +234,26 @@ def stats(
         "first": rows[0][0].strftime("%Y-%m-%dT%H:%M:%SZ"),
         "last": rows[-1][0].strftime("%Y-%m-%dT%H:%M:%SZ"),
         "truncated": truncated,
+        "total": total,
+        "last_any": last_any,
     }
 
 
 def format_stats(server_id: str, data: dict, *, days: int = 7, top: int = 10) -> str:
     """把 stats() 的结果排成给人看的文本。"""
     if not data.get("samples"):
+        total = data.get("total") or 0
+        if total == 0:
+            return (
+                f"服务器 {server_id} 还没有任何采样记录。\n"
+                f"补一条：pteropilot --players {server_id} --record"
+                "        # 或挂 cron 定期采"
+            )
+        # 有采样，但都不在窗口内——用户需要知道是「放窗口」而不是「去补采」
         return (
-            f"服务器 {server_id} 还没有玩家活跃记录。\n"
-            "先调用几次 list_players（每次会记一条采样），积累后再来看趋势。"
+            f"服务器 {server_id} 有 {total} 条采样，但最近一条在 "
+            f"{data.get('last_any') or '?'}，不在近 {days} 天内。\n"
+            f"放大窗口：pteropilot --players {server_id} --days 30"
         )
 
     out = [f"### 服务器 {server_id} 的玩家活跃（最近 {days} 天）"]

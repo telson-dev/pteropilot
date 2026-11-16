@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- `--players` 的空状态分不清「没采过」和「采过但都在窗口外」：
+  两者输出完全一样，用户不知道该补采还是该放大 `--days`。
+  `stats()` 现在额外返回 `total`（全时段条数）与 `last_any`（全时段最新一条），
+  据此分别提示「补一条采样」或「放大窗口到 30 天」
+- `--players` 的提示语还停在「先在 AI 客户端里调用 list_players」——
+  上一版加了 `--record` 之后这句话对纯命令行用户是死路，改成直接给命令
+
 ### Added
 - `pteropilot --players --record`：现在就采一条玩家在线样并写进本地历史
   - 采样此前只在 AI 客户端调用 `list_players` 时才会写，只用命令行的用户
