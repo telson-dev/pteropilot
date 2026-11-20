@@ -260,6 +260,10 @@ server whose disk is nearly full cannot write its world saves, and that failure
 is silent until something breaks. Servers without a disk quota on the panel are
 skipped rather than scored against zero.
 
+`--doctor` also reports how old the newest local player sample is. If you wired
+`--players --record` into cron, that line is the only place you would notice the
+cron job silently stopped — otherwise your trends just quietly go stale.
+
 `--doctor` also validates the tuning knobs. They all fall back silently when
 misconfigured, and `PANEL_READONLY` is the dangerous one: only `1`/`true`/`yes`/`on`
 enable it, so `PANEL_READONLY=enabled` leaves writes **unlocked** while looking

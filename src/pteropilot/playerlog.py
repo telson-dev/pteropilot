@@ -64,7 +64,7 @@ def list_servers(directory: Path | None = None) -> list[tuple[str, int]]:
 
 def _last_record(path: Path) -> dict | None:
     try:
-        with path.open("r", encoding="utf-8") as f:
+        with path.open("r", encoding="utf-8-sig") as f:
             last = None
             for line in f:
                 line = line.strip()
@@ -73,6 +73,25 @@ def _last_record(path: Path) -> dict | None:
             return json.loads(last) if last else None
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def latest_sample(directory: Path | None = None) -> tuple[str, datetime] | None:
+    """全机最新一条采样：``(server_id, 时间)``；一条都没有时返回 None。
+
+    只读每台文件的**最后一行**，不解析整份历史——--doctor 只需要知道
+    「最近一次采样是什么时候」。时间解析失败的那台跳过，不影响其余。
+    """
+    newest: tuple[str, datetime] | None = None
+    for server_id, _size in list_servers(directory):
+        row = _last_record(log_path(server_id, directory))
+        if not row:
+            continue
+        ts = _parse(row.get("t", ""))
+        if ts is None:
+            continue
+        if newest is None or ts > newest[1]:
+            newest = (server_id, ts)
+    return newest
 
 
 def record(
@@ -109,7 +128,7 @@ def _trim_if_needed(path: Path) -> None:
     try:
         if not path.exists():
             return
-        with path.open("r", encoding="utf-8") as f:
+        with path.open("r", encoding="utf-8-sig") as f:
             lines = f.readlines()
         if len(lines) <= MAX_LINES:
             return
@@ -162,7 +181,7 @@ def stats(
     total = 0
     last_any: str | None = None
     try:
-        with path.open("r", encoding="utf-8") as f:
+        with path.open("r", encoding="utf-8-sig") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -185,7 +204,7 @@ def stats(
 
     truncated = False
     try:
-        truncated = sum(1 for _ in path.open("r", encoding="utf-8")) >= MAX_LINES
+        truncated = sum(1 for _ in path.open("r", encoding="utf-8-sig")) >= MAX_LINES
     except OSError:
         pass
 

@@ -231,6 +231,10 @@ pteropilot-alerts --webhook https://... --backup-days 7
 `--disk` 和 `--cpu` / `--memory` 同一套逻辑：磁盘快满时服务器写不进存档，
 而这件事在真的坏掉之前一直是静默的。面板没给磁盘配额的服务器跳过，不拿 0 当分母。
 
+`--doctor` 还会报「本机最新一条采样是多久以前」。如果你把
+`--players --record` 挂进了 cron，这一行就是唯一能发现「cron 已经停了」的地方——
+否则历史趋势会一直安静地失真下去。
+
 `--doctor` 也会校验几个调优环境变量。它们配错时全是静默回退，其中
 `PANEL_READONLY` 最危险：只认 `1`/`true`/`yes`/`on`，写成
 `PANEL_READONLY=enabled` 看起来像上了锁，实际**写操作没被拦**。

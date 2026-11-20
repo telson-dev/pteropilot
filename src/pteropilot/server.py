@@ -1733,6 +1733,47 @@ _READONLY_TRUTHY = ("1", "true", "yes", "on")
 _READONLY_FALSY = ("0", "false", "no", "off", "")
 
 
+def check_playerlog(max_age_days: float = 3.0, directory=None, now=None) -> dict:
+    """检查本机玩家采样是否新鲜，返回 {lines, problems, hints}。
+
+    ``--players`` 的数据只靠采样积累，而采样来自 ``--record``（或 AI 客户端调用
+    list_players）。如果用户挂了 cron 而 cron 停了，采样会悄悄停在几天前——
+    这时看到的历史趋势会误导人，却没有任何提示。
+    """
+    from . import playerlog as _pl   # 包内相对导入；函数内导为了缩短 doctor 之外的导入链
+
+    newest = _pl.latest_sample(directory)
+    if newest is None:
+        return {
+            "lines": ["玩家采样：本机还没有记录（用 --players --record 或挂 cron 才会积累）"],
+            "problems": [],
+            "hints": [],
+        }
+
+    sid, ts = newest
+    ref = now or datetime.now(timezone.utc)
+    age_hours = (ref - ts).total_seconds() / 3600
+    # span 只表示时长（「30 分钟」），「前」由调用处拼——否则会写出
+    # 「已经 10 天前没更新了」这种不通顺的句子
+    if age_hours < 1:
+        span = f"{int(age_hours * 60)} 分钟"
+    elif age_hours < 48:
+        span = f"{int(age_hours)} 小时"
+    else:
+        span = f"{int(age_hours // 24)} 天"
+
+    line = f"玩家采样：最近一条在 {ts.strftime('%Y-%m-%d %H:%M')}Z（{span}前，来自 {sid}）"
+    hints: list[str] = []
+    if age_hours > max_age_days * 24:
+        # 不当作 problem：用户可能只是偶尔手动采一次，没有挂 cron。
+        # 但凡挂了 cron，这个提示就是唯一能暴露「它停了」的地方。
+        hints.append(
+            f"采样已经 {span}没更新了。如果你挂了 cron 定时 --players --record，"
+            "先确认它还在跑（crontab -l / systemctl status）；否则 --players 的趋势会失真"
+        )
+    return {"lines": [line], "problems": [], "hints": hints}
+
+
 def check_env_knobs(env: dict) -> dict:
     """校验可调环境变量，返回 {lines, problems, hints}。
 
@@ -1962,6 +2003,13 @@ def _run_doctor(skip_network: bool = False) -> int:
         for _p in _ac["problems"]:
             problems.append(_p)
         hints.extend(_ac["hints"])
+
+    # 3.3) 本机玩家采样是否还在更新（挂了 cron 但 cron 停了是静默失效）
+    _pf = check_playerlog()
+    for _line in _pf["lines"]:
+        print(_line)
+    problems.extend(_pf["problems"])
+    hints.extend(_pf["hints"])
 
     # 3.5) 版本新鲜度：装得比最新 release 旧时明确告知怎么升
     #      放这里而不是最后，因为配置不全时下面会提前 return，而「装了旧版」
