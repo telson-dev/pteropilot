@@ -1936,6 +1936,17 @@ def _check_alerts_config(path: Path) -> dict:
     return out
 
 
+def _doctor_section(title: str) -> None:
+    """打印一条分组线（``── 面板配置 ────────``）。
+
+    doctor 的输出常被整段贴给别人看，平铺十几种检查项时读的人得自己分类；
+    分组之后一眼能看出问题出在哪一块。
+    """
+    pad = max(2, 30 - _display_width(title))
+    print()
+    print(f"── {title} " + "─" * pad)
+
+
 def _run_doctor(skip_network: bool = False) -> int:
     """环境自检：Python 版本、配置、密钥前缀、面板连通、告警配置。
 
@@ -1952,6 +1963,7 @@ def _run_doctor(skip_network: bool = False) -> int:
     hints: list[str] = []
 
     # 1) 配置
+    _doctor_section("面板配置")
     raw_url = os.environ.get("PANEL_URL", "")
     api_key = os.environ.get("PANEL_API_KEY", "")
     app_key = os.environ.get("PANEL_APP_KEY", "")
@@ -1965,6 +1977,7 @@ def _run_doctor(skip_network: bool = False) -> int:
             suffix_note = f"（已自动规范化：{raw_url} → {norm}）"
         print(f"PANEL_URL: {norm} {suffix_note}".rstrip())
 
+    _showed_config = bool(raw_url)
     if not api_key:
         problems.append("未设置 PANEL_API_KEY")
         hints.append("面板「账户 → API 凭证」生成客户端密钥（ptlc_ / pacc_）")
@@ -1975,6 +1988,9 @@ def _run_doctor(skip_network: bool = False) -> int:
         print(f"PANEL_APP_KEY: {app_key[:5]}…（共 {len(app_key)} 字符）")
     else:
         hints.append("未设置 PANEL_APP_KEY：list_nodes / list_users 等应用级工具会 403（可选）")
+    if not _showed_config and not api_key:
+        # 两条都没设时这一组一行都没有；空的分组头读起来像出错，给个占位
+        print("（PANEL_URL / PANEL_API_KEY 都未设置）")
 
     # 2) 密钥角色（复用启动时的诊断）
     for w in key_role_warnings(config):
@@ -1986,8 +2002,10 @@ def _run_doctor(skip_network: bool = False) -> int:
 
     # 3.1) 可调环境变量：取值非法时都是静默回退默认值，用户不会知道
     _ek = check_env_knobs(dict(os.environ))
-    for _line in _ek["lines"]:
-        print(_line)
+    if _ek["lines"]:
+        _doctor_section("运行参数")     # 一个都没设时不占版面
+        for _line in _ek["lines"]:
+            print(_line)
     problems.extend(_ek["problems"])
     hints.extend(_ek["hints"])
 
@@ -1996,6 +2014,7 @@ def _run_doctor(skip_network: bool = False) -> int:
     # 函数内导入：alerts 反向依赖 server，顶层导入会形成循环
     from . import alerts as _alerts_mod
 
+    _doctor_section("本机状态")
     _ac = _check_alerts_config(_alerts_mod.default_config_file())
     for _line in _ac["lines"]:
         print(_line)
@@ -2015,6 +2034,7 @@ def _run_doctor(skip_network: bool = False) -> int:
     #      放这里而不是最后，因为配置不全时下面会提前 return，而「装了旧版」
     #      恰恰常被误判成「工具少/功能不对」，越早看到越好。
     if not skip_network:
+        _doctor_section("网络")
         latest = _latest_release_version()
         if latest is None:
             print(f"版本：v{__version__}（查不到最新版，跳过对比）")
@@ -2030,7 +2050,7 @@ def _run_doctor(skip_network: bool = False) -> int:
     # 4) 面板连通
     if problems:
         print()
-        print("结论：配置不完整，先补齐下面的项：")
+        print(f"结论：{len(problems)} 项需要处理（配置不完整，先补齐下面的项）：")
         for x in problems:
             print(f"  ✗ {x}")
         for h in hints:
@@ -2039,7 +2059,7 @@ def _run_doctor(skip_network: bool = False) -> int:
 
     if skip_network:
         print()
-        print("（已跳过网络检查 --no-network）")
+        print("结论：未发现问题（已跳过网络检查 --no-network）")
         for h in hints:
             print(f"  · {h}")
         return 0
@@ -2098,7 +2118,7 @@ def _run_doctor(skip_network: bool = False) -> int:
 
     print()
     if problems:
-        print("结论：有问题需要处理：")
+        print(f"结论：{len(problems)} 项需要处理：")
         for x in problems:
             print(f"  ✗ {x}")
     else:

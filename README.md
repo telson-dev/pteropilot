@@ -260,6 +260,10 @@ server whose disk is nearly full cannot write its world saves, and that failure
 is silent until something breaks. Servers without a disk quota on the panel are
 skipped rather than scored against zero.
 
+`--doctor` groups its checks (panel config / runtime knobs / local state /
+network) and ends with a count of outstanding problems, so the output is
+readable when pasted into a bug report.
+
 `--doctor` also reports how old the newest local player sample is. If you wired
 `--players --record` into cron, that line is the only place you would notice the
 cron job silently stopped — otherwise your trends just quietly go stale.
