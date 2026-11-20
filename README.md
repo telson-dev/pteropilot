@@ -198,6 +198,25 @@ pteropilot --status --watch --interval 10    # 5–3600 seconds
 pteropilot --status --watch --json           # one JSON object per line, on change only
 ```
 
+Watch keeps state in memory between rounds, so it can tell you **how long a
+server has been in its current state** — the difference between "just died 30s
+ago" and "been down for two hours" matters:
+
+```
+smp        STOPPED  🔴 stopped   12.3%   800M/2048M   3G/10G   1时20分
+lobby      RUNNING  🟢 running   12.3%   800M/2048M   3G/10G        -
+```
+
+That column only appears in watch mode (a one-shot query has no previous round
+to compare against), and healthy servers show `-` — it answers "how long has
+this been broken", not "how long has this been up". Plain-output heartbeats also
+mention the longest-running problem:
+
+```
+[09:41:02] 无变化（1/2 正常，最长异常 smp 已 1时20分）
+```
+```
+
 Backups are the thing you only miss after a crash, so `--backups` adds a "newest
 backup" column and calls out anything stale (default threshold 7 days):
 

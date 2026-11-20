@@ -2443,6 +2443,27 @@ def _fmt_disk(n) -> str:
     return f"{n / 1024 ** 2:.0f}M"
 
 
+def _fmt_duration(seconds) -> str:
+    """把「持续了多久」压成短字符串：45秒 / 3分12秒 / 1时05分 / 2天3时。
+
+    表格里这一列只有 8 列宽，所以不写成「1 小时 5 分 3 秒」那种长格式；
+    秒以下直接省略——watch 的粒度本来就不小于 5 秒。
+    """
+    if not isinstance(seconds, (int, float)) or seconds < 0:
+        return "未知"
+    total = int(seconds)
+    if total < 60:
+        return f"{total}秒"
+    days, rest = divmod(total, 86400)
+    if days:
+        return f"{days}天{rest // 3600:02d}时"
+    hours, rest = divmod(rest, 3600)
+    if hours:
+        return f"{hours}时{rest // 60:02d}分"
+    minutes, secs = divmod(rest, 60)
+    return f"{minutes}分{secs:02d}秒"
+
+
 def _fmt_backup_age(row: dict) -> str:
     """把一行里的备份信息渲染成单元格文案。
 
@@ -2472,9 +2493,14 @@ def _format_status(data: dict) -> str:
     # 列全部服务器时 players 恒为 None——整列都是 `-` 只会让人以为坏了。
     # 有任意一台拿得到人数才显示这一列（单台查询会填 players）。
     with_players = any(r.get("players") is not None for r in rows)
+    # --watch 才会给行加上 state_age_seconds；单次查询没有这个字段，
+    # 因为「持续多久」本来就需要上一轮数据才能知道。
+    with_age = any("state_age_seconds" in r for r in rows)
     header = f"{'标识':<18} {'名称':<20} {'状态':<12} {'CPU':>7} {'内存':>12} {'磁盘':>12}"
     if with_players:
         header += f" {'玩家':>5}"
+    if with_age:
+        header += f" {'异常持续':>8}"
     if with_backup:
         header += f" {'最新备份':>10}"
     lines = [header, "-" * _display_width(header)]
@@ -2501,6 +2527,10 @@ def _format_status(data: dict) -> str:
         )
         if with_players:
             line += f" {players:>5}"
+        if with_age:
+            # 健康的服务器不写「已运行 3 天」——这一列只回答「出问题多久了」
+            age_s = "-" if r["health"] == "healthy" else _fmt_duration(r.get("state_age_seconds"))
+            line += f" {age_s:>8}"
         if with_backup:
             line += f" {_fmt_backup_age(r):>10}"
         lines.append(line)
@@ -2522,19 +2552,45 @@ def _status_signature(data: dict) -> str:
     )
 
 
-async def _watch_loop(fetch, *, interval: float, emit, heartbeat, max_rounds: int | None = None):
+async def _watch_loop(fetch, *, interval: float, emit, heartbeat,
+                     max_rounds: int | None = None, clock=None):
     """轮询 status：第一次和每次「状态真的变了」时调 ``emit``，其余调 ``heartbeat``。
 
     把 I/O 全部拿出去（``emit`` / ``heartbeat`` 由调用方给），这样这个循环
     本身可以在测试里跑，不需要真的连面板、也不需要真等。
     返回最后一轮的数据，调用方据此算退出码。
     """
+    clock = clock or time.monotonic
     prev: str | None = None
+    prev_keys: dict[str, str] = {}
+    since: dict[str, float] = {}
     data: dict = {}
     rounds = 0
     while True:
         data = await fetch()
         sig = _status_signature(data)
+        now = clock()
+        # 只看 (state, health)：在线人数上下浮动不代表「状态变了」，
+        # 拿它重置计时会把「已异常 2 小时」这种信息反复归零。
+        keys = {
+            str(r.get("id") or ""): f"{r.get('state')}|{r.get('health')}"
+            for r in (data.get("servers") or [])
+        }
+        for ident, key in keys.items():
+            if ident not in since or prev_keys.get(ident) != key:
+                since[ident] = now
+        for ident in [i for i in since if i not in keys]:
+            del since[ident]         # 服务器被删或改了标识，别留孤儿
+        prev_keys = keys
+        if prev is not None:
+            # 首轮还不知道持续了多久，硬算会显示成 0 秒——那是假信息
+            data = {
+                **data,
+                "servers": [
+                    {**r, "state_age_seconds": now - since.get(str(r.get("id") or ""), now)}
+                    for r in (data.get("servers") or [])
+                ],
+            }
         if prev is None or sig != prev:
             emit(data, prev is None)
             prev = sig
@@ -2682,7 +2738,16 @@ def _run_status(argv: list[str]) -> int:
                 return
             servers = data.get("servers") or []
             ok = sum(1 for r in servers if r.get("health") == "healthy")
-            print(f"[{_stamp()}] 无变化（{ok}/{len(servers)} 正常）", flush=True)
+            # 心跳行顺便报「最长异常多久了」：扫一眼就知道在恶化还是已经躺很久
+            worst: tuple[float, str] | None = None
+            for r in servers:
+                if r.get("health") == "healthy":
+                    continue
+                age = r.get("state_age_seconds")
+                if isinstance(age, (int, float)) and (worst is None or age > worst[0]):
+                    worst = (age, str(r.get("id")))
+            tail = f"，最长异常 {worst[1]} 已 {_fmt_duration(worst[0])}" if worst else ""
+            print(f"[{_stamp()}] 无变化（{ok}/{len(servers)} 正常{tail}）", flush=True)
 
         async def _fetch() -> dict:
             return await _status_data(sid, with_backups=with_backups)
