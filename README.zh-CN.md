@@ -277,11 +277,17 @@ pteropilot --log smp --grep error          # 只匹配行，不区分大小写
 pteropilot --log smp --grep Started --json # 机器可读
 
 pteropilot --log "*"                       # 所有可访问服务器一起看
+pteropilot --log smp --watch               # 跟读：像 tail -f，只打新增行
 pteropilot --log smp,creative              # 只看这几台
 pteropilot --log "*" --grep error --json   # {servers: [...], grep: ...}
 ```
 
-多台模式并发取（有并发上限，和其他批量工具一致），单台失败会在输出里单独标注、
+多台模式并发取（有并发上限，和其他批量工具一致），`--watch` 会像 `tail -f` 一样跟读控制台：每 `--interval` 秒（默认 5，
+夹在 2–3600）轮询一次，只打印真正新增的行。面板返回的是「末 N 行」而不是
+增量，所以新增部分靠把上一轮缓冲与当前缓冲对齐算出来；两者完全没有重叠时
+它会明说「控制台内容整体变了（可能已重启）」，而不是假装整段都是新增。
+
+单台失败会在输出里单独标注、
 不盖住其余；没有命中的那台会明说「没有匹配的内容」，而不是悄悄跳过。
 `--json` 时多台顶层是 `{"servers": [...], "grep": ...}`，与单台的
 `{"server_id": ...}` 区分开，脚本能分辨。

@@ -2697,6 +2697,7 @@ def _print_help() -> None:
     print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
     print("  pteropilot --log smp --lines 300      往前翻，1–2000 行")
     print("  pteropilot --log \"*\"                 所有服务器一起看（也支持 a,b 逗号列表）")
+    print("  pteropilot --log smp --watch          跟读：像 tail -f，只打新增行")
     print("  pteropilot --players                  本机有采样记录的服务器")
     print("  pteropilot --players smp --days 7     近 7 天在线时长排行（离线也能看）")
     print("  pteropilot --players --record         现在采一条样写进历史（可挂 cron 积累）")
@@ -3159,6 +3160,54 @@ def _run_backups(argv: list[str]) -> int:
     return 0
 
 
+def _log_delta(old: list[str], new: list[str]) -> tuple[list[str], bool]:
+    """算出 ``new`` 里相对 ``old`` 的新增行，返回 ``(新行, 是否整体换了)``。
+
+    面板返回的是「最后 N 行」而不是增量，所以两次轮询之间通常是同一段文本被
+    窗口滑过：``old`` 的某个后缀等于 ``new`` 的前缀，那之后的部分才是新行。
+
+    找不到任何重叠时如实返回「整体换了」——面板重启或日志被清过时会这样，
+    这时候把整段打成「新增」是在骗人。
+    """
+    if not old:
+        return list(new), False
+    for k in range(min(len(old), len(new)), 0, -1):
+        if old[-k:] == new[:k]:
+            return new[k:], False
+    return list(new), True
+
+
+async def _log_watch_loop(fetch, *, interval: float, tail: int, emit,
+                          max_rounds: int | None = None):
+    """轮询控制台，每轮调一次 ``emit(items)``。
+
+    ``fetch()`` 返回 ``[(ident, lines | Exception), ...]``（已切好行、未过滤）。
+    ``items`` 里每项是 ``(ident, 新增行, 是否整体换了, 异常或 None)``：
+    首轮没有基准，只把末 ``tail`` 行当作「当前快照」交出去。
+    """
+    prev: dict[str, list[str]] = {}
+    rounds = 0
+    while True:
+        results = await fetch()
+        items: list[tuple[str, list[str], bool, BaseException | None]] = []
+        for ident, payload in results:
+            if isinstance(payload, BaseException):
+                items.append((ident, [], False, payload))
+                continue
+            if ident in prev:
+                delta, resync = _log_delta(prev[ident], payload)
+            else:
+                # 首轮：没有上一轮可比，只给「现在的末 tail 行」当起点
+                delta, resync = payload[-tail:], False
+            prev[ident] = payload
+            items.append((ident, delta, resync, None))
+        emit(items)
+        rounds += 1
+        if max_rounds is not None and rounds >= max_rounds:
+            return items
+        await asyncio.sleep(interval)
+
+
 def _run_log(argv: list[str]) -> int:
     """``pteropilot --log <标识> [--lines N] [--grep 关键字] [--json]``。
 
@@ -3176,9 +3225,10 @@ def _run_log(argv: list[str]) -> int:
             sid = argv[i + 1]
     if not sid:
         print(
-        '用法：pteropilot --log <标识|"*"|a,b> [--lines 80] [--grep 关键字] [--json]',
-        file=sys.stderr,
-    )
+            '用法：pteropilot --log <标识|"*"|a,b> [--lines 80] [--grep 关键字] [--json]'
+            ' [--watch]',
+            file=sys.stderr,
+        )
         return 2
 
     # 一台 / 多台都走同一条路径：identifiers 是待查列表。
@@ -3209,12 +3259,34 @@ def _run_log(argv: list[str]) -> int:
         return 2
     lines = max(1, min(2000, lines))
     pattern = _opt("--grep")
+    watch = "--watch" in argv
+
+    def _int_opt(flag: str, default: int, lo: int, hi: int) -> int:
+        if flag not in argv:
+            return default
+        i = argv.index(flag)
+        if i + 1 >= len(argv):
+            raise ValueError(f"{flag} 后面要跟一个数字")
+        try:
+            return max(lo, min(hi, int(argv[i + 1])))
+        except ValueError:
+            raise ValueError(f"{flag} 需要整数，收到 {argv[i + 1]!r}") from None
+
+    interval = 5
+    rounds: int | None = None
+    if watch:
+        try:
+            interval = _int_opt("--interval", 5, 2, 3600)
+            rounds = _int_opt("--rounds", 0, 0, 100000) or None
+        except ValueError as exc:
+            print(f"✗ {exc}", file=sys.stderr)
+            return 2
 
     try:
         config.validate()
     except ValueError as exc:
         print(f"pteropilot --log 需要面板配置：{exc}", file=sys.stderr)
-        return 1
+        return 3 if watch else 1
 
     def _split(raw: str) -> tuple[list[str], list[str]]:
         """把面板返回的原始日志切成行：清 ANSI、统一换行、去掉末尾空行。"""
@@ -3229,6 +3301,80 @@ def _run_log(argv: list[str]) -> int:
             return all_lines
         low = pattern.lower()
         return [ln for ln in all_lines if low in ln.lower()]
+
+    # ---- --watch：跟读（像 tail -f，只打新增行）----
+    if watch:
+        if not multi:
+            async def _fetch_watch() -> list[tuple[str, list[str] | BaseException]]:
+                client = PanelClient(config, timeout=20.0)
+                try:
+                    return [(sid, _split(await client.console_log(sid)))]
+                finally:
+                    await client.aclose()
+        else:
+            async def _fetch_watch() -> list[tuple[str, list[str] | BaseException]]:
+                ids = await _resolve_target_ids(wanted)
+                if not ids:
+                    return []
+                client = PanelClient(config, timeout=20.0)
+                try:
+                    async def _one(i: str):
+                        try:
+                            return i, _split(await client.console_log(i))
+                        except Exception as exc:  # noqa: BLE001 - 单台失败如实带回
+                            return i, exc
+                    return list(await _gather_bounded(_one, ids))
+                finally:
+                    await client.aclose()
+
+        state = {"first": True}
+
+        def _emit(items: list[tuple[str, list[str], bool, BaseException | None]]) -> None:
+            rows = []
+            for ident, delta, resync, err in items:
+                if err is not None:
+                    rows.append({"server_id": ident, "error": type(err).__name__})
+                    continue
+                shown = _filter(delta)
+                if shown:
+                    rows.append({"server_id": ident, "lines": shown, "resync": resync})
+            if not rows:
+                return
+            if as_json:
+                for r in rows:
+                    print(json.dumps(r, ensure_ascii=False))
+                return
+            first = state["first"]
+            state["first"] = False
+            stamp = datetime.now().strftime("%H:%M:%S")
+            for r in rows:
+                if "error" in r:
+                    print(f"[{stamp}] ❌ {r['server_id']} 读取失败（{r['error']}）",
+                          file=sys.stderr)
+                    continue
+                if r["resync"]:
+                    print(f"[{stamp}] {r['server_id']} 控制台内容整体变了（可能已重启），"
+                          "下面是当前末几行", flush=True)
+                prefix = f"{r['server_id']}| " if multi else ""
+                if first:
+                    print(f"[{stamp}] 开始跟读（先显示当前末 {lines} 行），Ctrl+C 退出",
+                          flush=True)
+                for ln in r["lines"]:
+                    print(f"{prefix}{ln}", flush=True)
+
+        print(f"每 {interval} 秒跟一次" + (f"，共 {rounds} 轮" if rounds else "")
+              + "，Ctrl+C 退出", flush=True)
+        try:
+            asyncio.run(_log_watch_loop(
+                _fetch_watch, interval=interval, tail=lines, emit=_emit, max_rounds=rounds,
+            ))
+        except KeyboardInterrupt:
+            print("\n已停止。")
+            return 0
+        except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+            print(f"✗ 读取失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+            return 4   # 与 --status 的「面板不可达」同一口径
+        return 0
 
     if not multi:
         async def _fetch() -> str:

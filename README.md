@@ -306,11 +306,20 @@ pteropilot --log smp                       # last 80 lines
 pteropilot --log smp --lines 300           # deeper (1–2000)
 pteropilot --log smp --grep error          # only matching lines, case-insensitive
 pteropilot --log smp --grep Started --json # machine-readable
+pteropilot --log smp --watch               # follow like tail -f: only new lines
 
 pteropilot --log "*"                       # every accessible server, at once
 pteropilot --log smp,creative              # just these two
 pteropilot --log "*" --grep error --json   # {servers: [...], grep: ...}
 ```
+
+`--watch` follows the console the way `tail -f` does: it polls every
+`--interval` seconds (default 5, clamped 2–3600) and prints only the lines that
+are genuinely new. The panel returns "the last N lines" rather than a delta, so
+the new part is found by aligning the previous buffer with the current one; when
+they share no overlap at all it says so explicitly ("console changed wholesale,
+possibly restarted") instead of pretending everything is new. `--json` emits one
+object per round, and only when something arrived.
 
 Multi-server mode fetches concurrently (capped, same as the other batch tools) and
 a single failing server is reported inline instead of hiding the rest. A server
