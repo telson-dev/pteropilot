@@ -207,7 +207,13 @@ pteropilot --status --backups --backup-days 30
 ```bash
 pteropilot --backups smp                 # 最近 20 个：创建时间 / 大小 / 状态 / 是否锁定
 pteropilot --backups smp --limit 50 --json
+pteropilot --backups smp --create      # 现在建一次
 ```
+
+`--create` 是原来只能通过 AI 客户端做的那一环。单台不必确认（与 MCP 工具
+`create_backup` 口径一致）；`"*"` 或 `a,b` **必须加 `--confirm`**，因为一次给
+所有服务器建备份可能撑爆存储——而磁盘写满正是让存档写不进去的原因。
+`PANEL_READONLY=1` 会拒绝。
 
 真要恢复时还要一个下载链接，可以直接按备份名要（不必手打 36 位 UUID，
 名字或 UUID 前缀唯一就行）：

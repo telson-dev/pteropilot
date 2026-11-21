@@ -2692,6 +2692,7 @@ def _print_help() -> None:
     print("  pteropilot --status --watch --interval 10   轮询间隔 5–3600 秒")
     print("  pteropilot --status --backups          附带「最新备份多久以前」并提醒过期的")
     print("  pteropilot --backups smp --limit 10   列出备份（创建时间/大小/状态/是否锁定）")
+    print("  pteropilot --backups smp --create     现在建一次备份（多台要加 --confirm）")
     print("  pteropilot --backup-url smp weekly-1  取一次性下载链接（备份名可只写前几位）")
     print("  pteropilot --log smp                  控制台末 80 行")
     print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
@@ -3096,6 +3097,79 @@ def _run_backups(argv: list[str]) -> int:
     except ValueError as exc:
         print(f"pteropilot --backups 需要面板配置：{exc}", file=sys.stderr)
         return 3
+
+    # ---- --create：主动触发备份（写操作）----
+    # 单台不必确认（与 MCP 工具 create_backup 口径一致）；多台必须 --confirm，
+    # 因为一次给所有服务器建备份可能撑爆存储，而磁盘写满会让存档写不进去。
+    if "--create" in argv:
+        if config.readonly:
+            print("✗ PANEL_READONLY 已开启，不能创建备份", file=sys.stderr)
+            return 2
+        multi = sid == "*" or "," in sid
+        if multi and "--confirm" not in argv:
+            print(
+                "✗ 给多台服务器同时建备份要先确认（可能撑爆存储）：\n"
+                '    pteropilot --backups "*" --create --confirm\n'
+                "  单台则不需要确认：pteropilot --backups smp --create",
+                file=sys.stderr,
+            )
+            return 2
+        wanted = ["*"] if sid == "*" else (
+            [x.strip() for x in sid.split(",") if x.strip()] if multi else [sid]
+        )
+
+        async def _create_one() -> list[tuple[str, dict | BaseException]]:
+            ids = await _resolve_target_ids(wanted)
+            if not ids:
+                return []
+            client = PanelClient(config, timeout=30.0)
+            try:
+                async def _one(i: str):
+                    try:
+                        return i, await client.create_backup(i)
+                    except Exception as exc:  # noqa: BLE001 - 单台失败要如实带回来
+                        return i, exc
+                return list(await _gather_bounded(_one, ids))
+            finally:
+                await client.aclose()
+
+        try:
+            results = asyncio.run(_create_one())
+        except Exception as exc:  # noqa: BLE001 - 面板不可达时给一句话，不糊堆栈
+            print(f"✗ 创建失败：{type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
+            return 4
+
+        if not results:
+            print("（没有可访问的服务器）")
+            return 4
+
+        entries: list[dict] = []
+        for ident, payload in results:
+            if isinstance(payload, BaseException):
+                entries.append({"server_id": ident,
+                                "error": f"{type(payload).__name__}: {redact(str(payload))}"})
+                continue
+            attrs = _attrs(payload)
+            entries.append({"server_id": ident,
+                            "uuid": attrs.get("uuid") or "",
+                            "name": _name(attrs)})
+
+        if as_json:
+            print(json.dumps({"created": entries}, ensure_ascii=False, indent=2))
+        else:
+            for e in entries:
+                if "error" in e:
+                    print(f"✗ {e['server_id']}: {e['error']}", file=sys.stderr)
+                    continue
+                tag = e["uuid"][:8] if e["uuid"] else "?"
+                print(f"{e['server_id']}: 已开始创建备份（{tag}…）")
+            ok = [e for e in entries if "error" not in e]
+            if ok:
+                print()
+                print(f"备份在后台跑，看进度：pteropilot --backups {ok[0]['server_id']}")
+                print(f"跑完取下载链接：pteropilot --backup-url {ok[0]['server_id']} <备份名>")
+        # 任一失败就如实给 4（面板部分失败），与其它批量命令口径一致
+        return 0 if all("error" not in e for e in entries) else 4
 
     async def _fetch() -> list[dict]:
         client = PanelClient(config, timeout=30.0)

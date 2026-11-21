@@ -231,7 +231,14 @@ When that warning fires, the next question is "which backup can I restore from?"
 ```bash
 pteropilot --backups smp                 # newest 20: created / size / state / locked
 pteropilot --backups smp --limit 50 --json
+pteropilot --backups smp --create       # take one right now
 ```
+
+`--create` is the piece that used to require going through an AI client. A single
+server needs no confirmation (same as the `create_backup` MCP tool); `"*"` or
+`a,b` **requires `--confirm`**, because starting backups on every server at once
+can exhaust storage — and a full disk is exactly what stops saves from being
+written. `PANEL_READONLY=1` refuses it.
 
 To actually restore one, ask for its one-time download link. You can name the
 backup instead of typing a 36-character UUID (a unique prefix is enough):
