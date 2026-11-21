@@ -30,6 +30,7 @@ SUB_OPTIONS = {
     "--no-network", "--json", "--lines", "--grep", "--watch", "--interval",
     "--rounds", "--days", "--top", "--servers", "--confirm", "--in", "--at",
     "--backups", "--backup-days", "--record", "--limit", "--create",
+    "--wait", "--wait-timeout",
 }
 
 SHORTHANDS = {"-h", "-V", "-v", "help"}

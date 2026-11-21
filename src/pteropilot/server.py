@@ -2693,6 +2693,7 @@ def _print_help() -> None:
     print("  pteropilot --status --backups          附带「最新备份多久以前」并提醒过期的")
     print("  pteropilot --backups smp --limit 10   列出备份（创建时间/大小/状态/是否锁定）")
     print("  pteropilot --backups smp --create     现在建一次备份（多台要加 --confirm）")
+    print("  pteropilot --backups smp --create --wait  等它跑完并直接给出下载链接")
     print("  pteropilot --backup-url smp weekly-1  取一次性下载链接（备份名可只写前几位）")
     print("  pteropilot --log smp                  控制台末 80 行")
     print("  pteropilot --log smp --grep error     只匹配行（不区分大小写）")
@@ -3062,6 +3063,28 @@ def _run_backup_url(argv: list[str]) -> int:
     return 0
 
 
+async def _wait_backup(client, server_id: str, backup_uuid: str, *,
+                        poll: float = 5.0, timeout: float = 600.0) -> dict | None:
+    """轮询到这份备份跑完，返回它的 attributes；超时返回 None。
+
+    面板备份列表里「跑完」的标志是 ``completed_at`` 非空。轮询期间的瞬时
+    读取错误按「这轮没看到」处理，不该让等待整条命令失败。
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            rows = await client.list_backups(server_id)
+        except Exception:  # noqa: BLE001 - 轮询瞬时错误不该让等待失败
+            rows = []
+        for raw in rows or []:
+            attrs = _attrs(raw)
+            if (attrs.get("uuid") or "") == backup_uuid and attrs.get("completed_at"):
+                return attrs
+        if time.monotonic() >= deadline:
+            return None
+        await asyncio.sleep(poll)
+
+
 def _run_backups(argv: list[str]) -> int:
     """``pteropilot --backups <标识> [--limit N] [--json]``。
 
@@ -3118,6 +3141,38 @@ def _run_backups(argv: list[str]) -> int:
             [x.strip() for x in sid.split(",") if x.strip()] if multi else [sid]
         )
 
+        # --wait：等备份跑完（默认 600 秒，夹在 5–3600）。备份是后台任务，
+        # 最常见的下一步就是「等它完成、拿链接」；既然创建是这条命令发起的，
+        # 就一并做掉——脚本一条命令备完。
+        wait = "--wait" in argv
+        wait_timeout = 600.0
+        if wait and "--wait-timeout" in argv:
+            i = argv.index("--wait-timeout")
+            if i + 1 >= len(argv):
+                print("✗ --wait-timeout 后面要跟秒数", file=sys.stderr)
+                return 2
+            try:
+                wait_timeout = float(argv[i + 1])
+            except ValueError:
+                print(f"✗ --wait-timeout 需要数字，收到 {argv[i + 1]!r}", file=sys.stderr)
+                return 2
+            wait_timeout = max(5.0, min(3600.0, wait_timeout))
+
+        async def _wait_one(ident: str, uuid: str) -> tuple[str, dict | None, str]:
+            """等一份备份跑完，并顺手取一次性下载链接。"""
+            client = PanelClient(config, timeout=30.0)
+            try:
+                done = await _wait_backup(client, ident, uuid, timeout=wait_timeout)
+                if not done:
+                    return ident, None, ""
+                try:
+                    url = await client.backup_download_url(ident, uuid)
+                except Exception:  # noqa: BLE001 - 拿不到链接不算备份失败
+                    url = ""
+                return ident, done, url
+            finally:
+                await client.aclose()
+
         async def _create_one() -> list[tuple[str, dict | BaseException]]:
             ids = await _resolve_target_ids(wanted)
             if not ids:
@@ -3154,6 +3209,31 @@ def _run_backups(argv: list[str]) -> int:
                             "uuid": attrs.get("uuid") or "",
                             "name": _name(attrs)})
 
+        ok_entries = [e for e in entries if "error" not in e and e["uuid"]]
+        if wait and ok_entries:
+            if not as_json:
+                n = len(ok_entries)
+                print(f"等 {n} 份备份跑完（最多 {int(wait_timeout)} 秒，每 5 秒查一次）…",
+                      flush=True)
+
+            async def _wait_all():
+                return list(await asyncio.gather(*(
+                    _wait_one(e["server_id"], e["uuid"]) for e in ok_entries
+                )))
+
+            waited = asyncio.run(_wait_all())
+            by_id = {e["server_id"]: e for e in ok_entries}
+            timed_out: list[str] = []
+            for ident, done, url in waited:
+                e = by_id[ident]
+                e["completed"] = bool(done)
+                e["url"] = url
+                if done:
+                    # 完成后从列表里拿到真实大小，输出里直接显示
+                    e["bytes"] = done.get("bytes")
+                if not done:
+                    timed_out.append(ident)
+
         if as_json:
             print(json.dumps({"created": entries}, ensure_ascii=False, indent=2))
         else:
@@ -3162,14 +3242,34 @@ def _run_backups(argv: list[str]) -> int:
                     print(f"✗ {e['server_id']}: {e['error']}", file=sys.stderr)
                     continue
                 tag = e["uuid"][:8] if e["uuid"] else "?"
-                print(f"{e['server_id']}: 已开始创建备份（{tag}…）")
-            ok = [e for e in entries if "error" not in e]
-            if ok:
-                print()
-                print(f"备份在后台跑，看进度：pteropilot --backups {ok[0]['server_id']}")
-                print(f"跑完取下载链接：pteropilot --backup-url {ok[0]['server_id']} <备份名>")
-        # 任一失败就如实给 4（面板部分失败），与其它批量命令口径一致
-        return 0 if all("error" not in e for e in entries) else 4
+                if wait and e.get("completed"):
+                    size = _fmt_size(e.get("bytes")) if e.get("bytes") else "?"
+                    print(f"✓ {e['server_id']}: 备份完成（{tag}…，{size}）")
+                    if e.get("url"):
+                        print(f"  链接：{e['url']}")
+                        print("  ⚠ 一次性链接：用过即失效，不要贴到公开的地方。")
+                    else:
+                        print(f"  取链接：pteropilot --backup-url "
+                              f"{e['server_id']} {tag}")
+                elif wait and "completed" in e:
+                    print(f"⏱ {e['server_id']}: 等了 {int(wait_timeout)} 秒还没跑完"
+                          f"（{tag}…）", file=sys.stderr)
+                else:
+                    print(f"{e['server_id']}: 已开始创建备份（{tag}…）")
+            if not wait:
+                ok = [e for e in entries if "error" not in e]
+                if ok:
+                    print()
+                    print(f"备份在后台跑，看进度：pteropilot --backups {ok[0]['server_id']}")
+                    print(f"跑完取下载链接：pteropilot --backup-url "
+                          f"{ok[0]['server_id']} <备份名>")
+                    print("想一条命令等它跑完并拿链接：加 --wait")
+        # 任一失败就如实给 4；--wait 超时也是 4（备份可能仍在跑，让它继续）
+        if any("error" in e for e in entries):
+            return 4
+        if wait and any(e.get("completed") is False for e in entries):
+            return 4
+        return 0
 
     async def _fetch() -> list[dict]:
         client = PanelClient(config, timeout=30.0)

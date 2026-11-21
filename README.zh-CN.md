@@ -208,12 +208,17 @@ pteropilot --status --backups --backup-days 30
 pteropilot --backups smp                 # 最近 20 个：创建时间 / 大小 / 状态 / 是否锁定
 pteropilot --backups smp --limit 50 --json
 pteropilot --backups smp --create      # 现在建一次
+pteropilot --backups smp --create --wait   # 建完等它跑完，并直接打印链接
 ```
 
 `--create` 是原来只能通过 AI 客户端做的那一环。单台不必确认（与 MCP 工具
 `create_backup` 口径一致）；`"*"` 或 `a,b` **必须加 `--confirm`**，因为一次给
 所有服务器建备份可能撑爆存储——而磁盘写满正是让存档写不进去的原因。
 `PANEL_READONLY=1` 会拒绝。
+
+`--wait` 会一直轮询到备份跑完（默认 600 秒，用 `--wait-timeout` 改），然后顺手取
+一次性下载链接——脚本一条命令就能备完并拿到文件。备份始终没完成时退出码 4；
+**取链接失败不会把「备份已成功」判成失败**。
 
 真要恢复时还要一个下载链接，可以直接按备份名要（不必手打 36 位 UUID，
 名字或 UUID 前缀唯一就行）：
